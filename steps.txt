@@ -1,7 +1,9 @@
 for testing use this command:
-$env:NODE_ENV="DEV"; node <filename>.js
+$env:NODE_ENV="DEV"; node <filename>.js FOR WINDOWS
+NODE_ENV="DEV" node <filename>.js FOR LINUX
 
 for production use this command:
 $env:NODE_ENV="PROD"; node <filename>.js
+NODE_ENV="PROD" node <filename>.js FOR LINUX
 
 the cron will run everyday 11pm ist
