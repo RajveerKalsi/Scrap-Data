@@ -226,7 +226,7 @@ async function saveResultsToPostgres(validResults) {
 }
 
 async function main() {
-    const filePath = 'C:/VS Code/Scrap Data/PlatformCatalogsOfficeDepot.csv';
+    const filePath = 'PlatformCatalogsOfficeDepot.csv';
 
     const data = await readUrlsFromFile(filePath);
     if (data.length > 0) {
