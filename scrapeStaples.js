@@ -95,7 +95,7 @@ async function fetchAllProductsData(data) {
     const missingUrlIds = [];
     let missingUrlCount = 0;
 
-    const limit = process.env.NODE_ENV === 'DEV' ? 7 : data.length;
+    const limit = process.env.NODE_ENV === 'DEV' ? 5 : data.length;
 
     // Collect both valid and "Not found" results
     const allResults = await Promise.all(data.slice(0, limit).map(async (item) => {
@@ -142,14 +142,13 @@ async function fetchAllProductsData(data) {
     }
 
     await saveResultsToCSV(validResults, unsuccessfulIds);
-    await saveHTML(validResults); 
+    // await saveHTML(validResults); 
     await saveResultsToPostgres(allResults); 
 }
 
-
-
 async function saveResultsToCSV(validResults, unsuccessfulIds) {
     const today = new Date().toLocaleString('en-US', {
+        timeZone: 'America/Los_Angeles', 
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -157,7 +156,7 @@ async function saveResultsToCSV(validResults, unsuccessfulIds) {
         minute: '2-digit',
         second: '2-digit',
         hour12: false
-    }).replace(',', ' -');
+    }).replace(',', ' -'); 
 
     const csvData = validResults.map(item => ({
         Date: today,
@@ -214,7 +213,7 @@ async function saveResultsToPostgres(validResults) {
             VALUES ($1, $2, $3, $4, $5)
         `;
 
-        const today = new Date().toISOString();
+        const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
 
         for (const item of validResults) {
             const values = [
@@ -249,8 +248,10 @@ async function main() {
     }
 }
 
-cron.schedule('*/10 * * * *', async () => {
+cron.schedule('0 23 * * *', async () => {
     console.log("Starting scheduled task...");
     await main();
     console.log("Scheduled task completed.");
+}, {
+    timezone: "Asia/Kolkata"
 });

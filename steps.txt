@@ -1,0 +1,7 @@
+for testing use this command:
+$env:NODE_ENV="DEV"; node <filename>.js
+
+for production use this command:
+$env:NODE_ENV="PROD"; node <filename>.js
+
+the cron will run everyday 11pm ist
