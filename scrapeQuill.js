@@ -79,7 +79,7 @@ async function fetchAllProductsData(data) {
         } else {
             unsuccessfulFetchCount++;
             unsuccessfulIds.push(item.itemId);
-            return null;
+            return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
         }
     }));
 
@@ -188,8 +188,8 @@ async function saveResultsToPostgres(validResults) {
                 today,
                 item.itemId,
                 item.productTitle,
-                parseFloat(item.price.replace(/[^0-9.-]+/g,"")),
-                item.isOutOfStock ? 'Out of Stock' : 'In Stock'
+                item.price === "Not Found" ? null : parseFloat(item.price.replace(/[^0-9.-]+/g, "")),
+                item.isOutOfStock === "Not Found" ? "Not Found" : (item.isOutOfStock ? 'Out of Stock' : 'In Stock')
             ];
             await client.query(queryText, values);
         }
@@ -201,7 +201,6 @@ async function saveResultsToPostgres(validResults) {
         await client.end();
     }
 }
-
 
 async function main() {
     const filePath = 'PlatformCatalogsQuill.csv';
