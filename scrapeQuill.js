@@ -217,7 +217,7 @@ async function main() {
     }
 }
 
-cron.schedule('0 23 * * *', async () => {
+cron.schedule('30 12 * * *', async () => {
     console.log("Starting scheduled task...");
     await main();
     console.log("Scheduled task completed.");
