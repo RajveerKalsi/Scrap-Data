@@ -3,4 +3,5 @@ node_modules
 package-lock.json
 scraped_data_staples.csv
 scraped_data_quill.csv
+crap.js
 scraped_data_office_depot.csv

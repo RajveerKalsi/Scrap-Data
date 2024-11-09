@@ -17,7 +17,7 @@ async function readUrlsFromFile(filePath) {
     }));
 }
 
-async function fetchData(url, retries = 100) {
+async function fetchData(url, retries = 20) {
     let attempt = 0;
     while (attempt < retries) {
         try {
@@ -85,66 +85,106 @@ async function fetchProductData(url, itemId) {
     return { itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
 }
 
-
-
-
-async function fetchAllProductsData(data) {
+async function fetchAllProductsData(data, retries = 50) {
     let successfulFetchCount = 0;
     let unsuccessfulFetchCount = 0;
-    const unsuccessfulIds = [];
+    let unsuccessfulIds = []; // Changed from const to let
     const missingUrlIds = [];
     let missingUrlCount = 0;
 
-    const limit = process.env.NODE_ENV === 'DEV' ? 5 : data.length;
+    const limit = process.env.NODE_ENV === 'DEV' ? 20 : data.length;
+    const batchSize = 10;
+    const totalBatches = Math.ceil(limit / batchSize);
 
-    // Collect both valid and "Not found" results
-    const allResults = await Promise.all(data.slice(0, limit).map(async (item) => {
-        if (item.url === 'NULL') {
-            missingUrlCount++;
-            missingUrlIds.push(item.itemId);
-            item.url = `https://www.staples.com/product_${item.itemId}`;
-        }
+    // Processing data in batches of 10
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const batchStart = batchIndex * batchSize;
+        const batchEnd = Math.min(batchStart + batchSize, limit);
+        const batch = data.slice(batchStart, batchEnd);
 
-        const productData = await fetchProductData(item.url, item.itemId);
-        if (productData) {
-            if (productData.productTitle === "Not Found") {
+        const batchResults = await Promise.all(batch.map(async (item) => {
+            if (item.url === 'NULL') {
+                missingUrlCount++;
+                missingUrlIds.push(item.itemId);
+                item.url = `https://www.staples.com/product_${item.itemId}`;
+            }
+
+            const productData = await fetchProductData(item.url, item.itemId);
+            if (productData) {
+                if (productData.productTitle === "Not Found") {
+                    unsuccessfulFetchCount++;
+                    unsuccessfulIds.push(item.itemId);
+                } else {
+                    successfulFetchCount++;
+                }
+                return productData;
+            } else {
                 unsuccessfulFetchCount++;
                 unsuccessfulIds.push(item.itemId);
-            } else {
-                successfulFetchCount++;
+                return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
             }
-            return productData;
-        } else {
-            unsuccessfulFetchCount++;
-            unsuccessfulIds.push(item.itemId);
-            return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+        }));
+
+        const validResults = batchResults.filter(data => data && data.productTitle !== "Not Found");
+
+        await saveResultsToCSV(validResults, unsuccessfulIds);
+        await saveResultsToPostgres(batchResults);
+
+        console.log(`Batch ${batchIndex + 1} processed:`);
+        console.log(`Successful fetches: ${successfulFetchCount}`);
+        console.log(`Unsuccessful fetches: ${unsuccessfulFetchCount}`);
+        console.log(`Missing URL count: ${missingUrlCount}`);
+
+        if (unsuccessfulIds.length > 0) {
+            console.log(`Unsuccessful fetch IDs: ${unsuccessfulIds.join(', ')}`);
         }
-    }));
 
-    // Remove any null results (if any)
-    const validResults = allResults.filter(data => data && data.productTitle !== "Not Found");
+        if (missingUrlIds.length > 0) {
+            console.log(`Missing URL IDs: ${missingUrlIds.join(', ')}`);
+        }
 
-    allResults.forEach(item => {
-        console.log(`SKU: ${item.itemId}, Product Title: ${item.productTitle}, Out of Stock: ${item.isOutOfStock}`);
-    });
+        // Retry mechanism for failed URLs (only retry once per batch)
+        if (unsuccessfulIds.length > 0) {
+            console.log(`Retrying failed URLs in batch ${batchIndex + 1}, attempt 1`);
 
-    console.log("Scraped data:", allResults);
-    console.log(`Successful fetches: ${successfulFetchCount}`);
-    console.log(`Unsuccessful fetches: ${unsuccessfulFetchCount}`);
-    console.log(`Missing URL count: ${missingUrlCount}`);
+            const failedUrls = batch.filter(item => unsuccessfulIds.includes(item.itemId));
 
-    if (unsuccessfulIds.length > 0) {
-        console.log(`Unsuccessful fetch IDs: ${unsuccessfulIds.join(', ')}`);
+            const retryResults = await Promise.all(failedUrls.map(async (item) => {
+                const productData = await fetchProductData(item.url, item.itemId);
+                if (productData && productData.productTitle !== "Not Found") {
+                    successfulFetchCount++;
+                    return productData;
+                } else {
+                    return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+                }
+            }));
+
+            const successfulRetries = retryResults.filter(result => result.productTitle !== "Not Found");
+
+            // Update unsuccessfulIds to remove the successful retries
+            unsuccessfulIds = unsuccessfulIds.filter(id => !successfulRetries.some(result => result.itemId === id));
+
+            // Save retry results
+            await saveResultsToCSV(successfulRetries, unsuccessfulIds);
+            await saveResultsToPostgres(successfulRetries);
+
+            if (unsuccessfulIds.length > 0) {
+                console.log(`Some URLs failed after retry in batch ${batchIndex + 1}`);
+            } else {
+                console.log(`All failed URLs retried successfully in batch ${batchIndex + 1}`);
+            }
+
+            // If there are still failures after the retry, just move to the next batch
+            if (unsuccessfulIds.length > 0) {
+                console.log(`Skipping further retries for batch ${batchIndex + 1}. Moving to next batch.`);
+            }
+        }
+
+        console.log(`Batch ${batchIndex + 1} completed.`);
     }
-
-    if (missingUrlIds.length > 0) {
-        console.log(`Missing URL IDs: ${missingUrlIds.join(', ')}`);
-    }
-
-    await saveResultsToCSV(validResults, unsuccessfulIds);
-    // await saveHTML(validResults); 
-    await saveResultsToPostgres(allResults); 
 }
+
+
 
 async function saveResultsToCSV(validResults, unsuccessfulIds) {
     const today = new Date().toLocaleString('en-US', {
@@ -248,10 +288,11 @@ async function main() {
     }
 }
 
-cron.schedule('30 12 * * *', async () => {
-    console.log("Starting scheduled task...");
-    await main();
-    console.log("Scheduled task completed.");
-}, {
-    timezone: "Asia/Kolkata"
-});
+// cron.schedule('0 23 * * *', async () => {
+//     console.log("Starting scheduled task...");
+//     await main();
+//     console.log("Scheduled task completed.");
+// }, {
+//     timezone: "Asia/Kolkata"
+// });
+main();

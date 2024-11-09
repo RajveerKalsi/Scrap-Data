@@ -18,6 +18,11 @@ async function readUrlsFromFile(filePath) {
 }
 
 async function fetchData(url, retries = 50) {
+    // Skip invalid URLs (e.g., 'NULL')
+    if (url === 'NULL') {
+        console.error(`Invalid URL: ${url}`);
+        return null;
+    }
     let attempt = 0;
     while (attempt < retries) {
         try {
@@ -56,7 +61,7 @@ async function fetchProductData(url, itemId) {
     return null;
 }
 
-async function fetchAllProductsData(data) {
+async function fetchAllProductsData(data, retries = 50) {
     let successfulFetchCount = 0;
     let unsuccessfulFetchCount = 0;
     const unsuccessfulIds = [];
@@ -64,47 +69,112 @@ async function fetchAllProductsData(data) {
     let missingUrlCount = 0;
 
     const limit = process.env.NODE_ENV === 'DEV' ? 5 : data.length;
+    const batchSize = 10;
+    const totalBatches = Math.ceil(data.length / batchSize);
 
-    const results = await Promise.all(data.slice(0, limit).map(async (item) => {
-        if (item.url === 'NULL') {
-            missingUrlCount++;
-            missingUrlIds.push(item.itemId);
-            return null;
+    // Processing data in batches of 10
+    for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const batchStart = batchIndex * batchSize;
+        const batchEnd = Math.min(batchStart + batchSize, data.length);
+        const batch = data.slice(batchStart, batchEnd);
+
+        let batchAttempts = 0;
+        let batchSuccessfulFetches = 0;
+        let batchUnsuccessfulFetches = 0;
+        let batchUnsuccessfulIds = [];
+        let batchMissingUrlIds = [];
+        let batchMissingUrlCount = 0;
+
+        // Fetching data for this batch
+        const results = await Promise.all(batch.map(async (item) => {
+            // Skip invalid URLs (e.g., 'NULL')
+            if (item.url === 'NULL') {
+                batchMissingUrlCount++;
+                batchMissingUrlIds.push(item.itemId);
+                return null;
+            }
+
+            const productData = await fetchProductData(item.url, item.itemId);
+            if (productData) {
+                batchSuccessfulFetches++;
+                return productData;
+            } else {
+                batchUnsuccessfulFetches++;
+                batchUnsuccessfulIds.push(item.itemId);
+                return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+            }
+        }));
+
+        // Collect valid results for this batch
+        const validResults = results.filter(data => data !== null);
+        
+        // Store results in CSV and DB after processing the batch
+        await saveResultsToCSV(validResults, batchUnsuccessfulIds, batchMissingUrlIds);
+        await saveResultsToPostgres(validResults);
+
+        // Log batch results
+        console.log(`Batch ${batchIndex + 1} processed:`);
+        console.log(`Successful fetches: ${batchSuccessfulFetches}`);
+        console.log(`Unsuccessful fetches: ${batchUnsuccessfulFetches}`);
+        console.log(`Missing URL count: ${batchMissingUrlCount}`);
+
+        if (batchUnsuccessfulIds.length > 0) {
+            console.log(`Unsuccessful fetch IDs in batch ${batchIndex + 1}: ${batchUnsuccessfulIds.join(', ')}`);
         }
 
-        const productData = await fetchProductData(item.url, item.itemId);
-        if (productData) {
-            successfulFetchCount++;
-            return productData;
-        } else {
-            unsuccessfulFetchCount++;
-            unsuccessfulIds.push(item.itemId);
-            return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+        if (batchMissingUrlIds.length > 0) {
+            console.log(`Missing URL IDs in batch ${batchIndex + 1}: ${batchMissingUrlIds.join(', ')}`);
         }
-    }));
 
-    const validResults = results.filter(data => data !== null);
+        // Retry the failed URLs up to `retries` times
+        let retryAttempts = 0;
+        let retryUnsuccessfulIds = [];
+        while (retryAttempts < retries && batchUnsuccessfulIds.length > 0) {
+            console.log(`Retrying failed URLs in batch ${batchIndex + 1}, attempt ${retryAttempts + 1}`);
+            
+            const failedUrls = batch.filter(item => batchUnsuccessfulIds.includes(item.itemId));
 
-    validResults.forEach(item => {
-        console.log(`SKU: ${item.itemId}, Out of Stock: ${item.isOutOfStock}`);
-    });
+            // Retry failed URLs
+            const retryResults = await Promise.all(failedUrls.map(async (item) => {
+                const productData = await fetchProductData(item.url, item.itemId);
+                if (productData) {
+                    return productData;
+                } else {
+                    return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+                }
+            }));
 
-    console.log("Scraped data:", validResults);
-    console.log(`Successful fetches: ${successfulFetchCount}`);
-    console.log(`Unsuccessful fetches: ${unsuccessfulFetchCount}`);
-    console.log(`Missing URL count: ${missingUrlCount}`);
+            // Collect successful retries
+            const successfulRetries = retryResults.filter(result => result !== null);
+            const unsuccessfulRetries = retryResults.filter(result => result === null);
 
-    if (unsuccessfulIds.length > 0) {
-        console.log(`Unsuccessful fetch IDs: ${unsuccessfulIds.join(', ')}`);
+            // Update counts
+            retryUnsuccessfulIds = retryUnsuccessfulIds.concat(unsuccessfulRetries.map(result => result.itemId));
+            batchSuccessfulFetches += successfulRetries.length;
+            batchUnsuccessfulFetches += unsuccessfulRetries.length;
+
+            // Store retry results
+            await saveResultsToCSV(successfulRetries, retryUnsuccessfulIds, batchMissingUrlIds);
+            await saveResultsToPostgres(successfulRetries);
+
+            console.log(`Retry attempt ${retryAttempts + 1} completed for batch ${batchIndex + 1}.`);
+
+            // If all failed URLs are retried or exhausted, stop retrying
+            if (unsuccessfulRetries.length === 0) {
+                break;
+            }
+
+            retryAttempts++;
+            console.log(`Retrying for failed URLs in batch ${batchIndex + 1}...`);
+            await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for 5 seconds before retrying
+        }
+
+        if (retryAttempts === retries) {
+            console.error(`Failed to fetch data from some URLs in batch ${batchIndex + 1} after ${retries} attempts.`);
+        }
+
+        // Proceed to the next batch
     }
-
-    if (missingUrlIds.length > 0) {
-        console.log(`Missing URL IDs: ${missingUrlIds.join(', ')}`);
-    }
-
-    await saveResultsToCSV(validResults, unsuccessfulIds, missingUrlIds);
-    // await saveHTML(validResults);
-    await saveResultsToPostgres(validResults);
 }
 
 async function saveResultsToCSV(validResults, unsuccessfulIds, missingUrlIds) {
@@ -151,8 +221,10 @@ async function saveResultsToCSV(validResults, unsuccessfulIds, missingUrlIds) {
 
     if (fs.existsSync(filePath)) {
         fs.appendFileSync(filePath, '\n' + csv.split('\n').slice(1).join('\n'));
+        console.log("Data appended in the csv.");
     } else {
         fs.writeFileSync(filePath, csv);
+        console.log("Data is in the csv newly created.");
     }
 }
 
@@ -216,10 +288,11 @@ async function main() {
     }
 }
 
-cron.schedule('30 12 * * *', async () => {
-    console.log("Starting scheduled task...");
-    await main();
-    console.log("Scheduled task completed.");
-}, {
-    timezone: "Asia/Kolkata"
-});
+// cron.schedule('30 12 * * *', async () => {
+//     console.log("Starting scheduled task...");
+//     await main();
+//     console.log("Scheduled task completed.");
+// }, {
+//     timezone: "Asia/Kolkata"
+// });
+main();
