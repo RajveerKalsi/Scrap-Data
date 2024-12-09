@@ -13,7 +13,8 @@ async function readUrlsFromFile(filePath) {
 
     return parsedData.map(row => ({
         url: row['PDP Link'] || 'NULL',
-        itemId: row['Quill Item #'].trim()
+        itemId: row['Quill Item #'].trim(),
+        vendorPartNo: row['Vendor Part # '] || null
     }));
 }
 
@@ -50,13 +51,13 @@ function checkOutOfStock($) {
     return $('.promo-flag').text().includes('Out of stock');
 }
 
-async function fetchProductData(url, itemId) {
+async function fetchProductData(url, itemId, vendorPartNo) {
     const $ = await fetchData(url);
     if ($) {
         const productTitle = await fetchTitle($);
         const price = await fetchPrice($);
         const isOutOfStock = checkOutOfStock($);
-        return { itemId, productTitle, price, isOutOfStock, html: $.html() };
+        return { itemId, vendorPartNo, productTitle, price, isOutOfStock, html: $.html() };
     }
     return null;
 }
@@ -94,14 +95,14 @@ async function fetchAllProductsData(data, retries = 50) {
                 return null;
             }
 
-            const productData = await fetchProductData(item.url, item.itemId);
+            const productData = await fetchProductData(item.url, item.itemId, item.vendorPartNo);
             if (productData) {
                 batchSuccessfulFetches++;
                 return productData;
             } else {
                 batchUnsuccessfulFetches++;
                 batchUnsuccessfulIds.push(item.itemId);
-                return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+                return { itemId: item.itemId, vendorPartNo: item.vendorPartNo, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
             }
         }));
 
@@ -136,11 +137,11 @@ async function fetchAllProductsData(data, retries = 50) {
 
             // Retry failed URLs
             const retryResults = await Promise.all(failedUrls.map(async (item) => {
-                const productData = await fetchProductData(item.url, item.itemId);
+                const productData = await fetchProductData(item.url, item.itemId, item.vendorPartNo);
                 if (productData) {
                     return productData;
                 } else {
-                    return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+                    return { itemId: item.itemId, vendorPartNo: item.vendorPartNo, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
                 }
             }));
 
@@ -179,7 +180,7 @@ async function fetchAllProductsData(data, retries = 50) {
 
 async function saveResultsToCSV(validResults, unsuccessfulIds, missingUrlIds) {
     const today = new Date().toLocaleString('en-US', {
-        timeZone: 'America/Los_Angeles', 
+        timeZone: 'America/Los_Angeles',
         year: 'numeric',
         month: '2-digit',
         day: '2-digit',
@@ -187,11 +188,12 @@ async function saveResultsToCSV(validResults, unsuccessfulIds, missingUrlIds) {
         minute: '2-digit',
         second: '2-digit',
         hour12: false
-    }).replace(',', ' -');    
+    }).replace(',', ' -');
 
     const csvData = validResults.map(item => ({
         Date: today,
         'Quill Item #': item.itemId,
+        'Vendor Part #': item.vendorPartNo || "N/A",
         ProductTitle: item.productTitle,
         Price: item.price,
         InStock: item.isOutOfStock ? 'Out of Stock' : 'In Stock'
@@ -200,6 +202,7 @@ async function saveResultsToCSV(validResults, unsuccessfulIds, missingUrlIds) {
     const unsuccessfulData = unsuccessfulIds.map(id => ({
         Date: today,
         'Quill Item #': id,
+        'Vendor Part #': "Unsuccessful",
         ProductTitle: "Unsuccessful",
         Price: "Unsuccessful",
         InStock: "Unsuccessful"
@@ -208,6 +211,7 @@ async function saveResultsToCSV(validResults, unsuccessfulIds, missingUrlIds) {
     const missingUrlData = missingUrlIds.map(id => ({
         Date: today,
         'Quill Item #': id,
+        'Vendor Part #': "Empty",
         ProductTitle: "Empty",
         Price: "Empty",
         InStock: "Empty"
@@ -221,12 +225,13 @@ async function saveResultsToCSV(validResults, unsuccessfulIds, missingUrlIds) {
 
     if (fs.existsSync(filePath)) {
         fs.appendFileSync(filePath, '\n' + csv.split('\n').slice(1).join('\n'));
-        console.log("Data appended in the csv.");
+        console.log("Data appended in the CSV.");
     } else {
         fs.writeFileSync(filePath, csv);
-        console.log("Data is in the csv newly created.");
+        console.log("Data is in the CSV newly created.");
     }
 }
+
 
 async function saveHTML(validResults) {
     if (validResults.length > 0 && validResults[0].html) {
@@ -249,8 +254,8 @@ async function saveResultsToPostgres(validResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."QuillTracker" ("trackingDate", "quillItemId", "productTitle", "price", "inStock")
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO "Records"."QuillTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
+            VALUES ($1, $2, $3, $4, $5, $6)
         `;
 
         const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
@@ -259,6 +264,7 @@ async function saveResultsToPostgres(validResults) {
             const values = [
                 today,
                 item.itemId,
+                item.vendorPartNo || null, // Add "Vendor Part #" value
                 item.productTitle,
                 item.price === "Not Found" ? null : parseFloat(item.price.replace(/[^0-9.-]+/g, "")),
                 item.isOutOfStock === "Not Found" ? "Not Found" : (item.isOutOfStock ? 'Out of Stock' : 'In Stock')
@@ -273,6 +279,7 @@ async function saveResultsToPostgres(validResults) {
         await client.end();
     }
 }
+
 
 async function main() {
     const filePath = 'PlatformCatalogsQuill.csv';

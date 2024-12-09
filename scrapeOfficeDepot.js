@@ -13,7 +13,8 @@ async function readUrlsFromFile(filePath) {
 
     return parsedData.map(row => ({
         url: row['PDP Link'] || 'NULL',
-        itemId: row['Item # (Office Depot sku #) ']
+        itemId: row['Item # (Office Depot sku #) '],
+        vendorPartNo: row['Vendor Part # '] || null
     }));
 }
 
@@ -50,10 +51,11 @@ async function fetchStock($) {
 }
 
 
-async function fetchProductData(url, itemId, failedItems = new Set()) {
+async function fetchProductData(url, itemId, vendorPartNo, failedItems = new Set()) {
     if (failedItems.has(itemId)) {
         return {
             itemId,
+            vendorPartNo,
             productTitle: "Unsuccessful",
             price: "Unsuccessful",
             stockStatus: "Unsuccessful",
@@ -70,6 +72,7 @@ async function fetchProductData(url, itemId, failedItems = new Set()) {
             failedItems.add(itemId); // Mark as failed to avoid future retries
             return {
                 itemId,
+                vendorPartNo,
                 productTitle: "Not Found",
                 price: "Not Found",
                 stockStatus: "Not Found",
@@ -81,7 +84,7 @@ async function fetchProductData(url, itemId, failedItems = new Set()) {
         const price = await fetchPrice($);
         const stockStatus = await fetchStock($);
 
-        return { itemId, productTitle, price, stockStatus, html: $.html() };
+        return { itemId, vendorPartNo, productTitle, price, stockStatus, html: $.html() };
     }
 
     return null;
@@ -113,7 +116,7 @@ async function fetchAllProductsData(data, retries = 50) {
                 item.url = `https://www.officedepot.com/a/products/${item.itemId}`;
             }
 
-            const productData = await fetchProductData(item.url, item.itemId);
+            const productData = await fetchProductData(item.url, item.itemId, item.vendorPartNo);
             if (productData) {
                 if (productData.productTitle === "Not Found") {
                     unsuccessfulFetchCount++;
@@ -125,7 +128,7 @@ async function fetchAllProductsData(data, retries = 50) {
             } else {
                 unsuccessfulFetchCount++;
                 unsuccessfulIds.push(item.itemId);
-                return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", stockStatus: "Not Found" };
+                return { itemId: item.itemId, vendorPartNo: item.vendorPartNo, productTitle: "Not Found", price: "Not Found", stockStatus: "Not Found" };
             }
         }));
 
@@ -155,12 +158,12 @@ async function fetchAllProductsData(data, retries = 50) {
             const failedUrls = batch.filter(item => unsuccessfulIds.includes(item.itemId));
 
             const retryResults = await Promise.all(failedUrls.map(async (item) => {
-                const productData = await fetchProductData(item.url, item.itemId);
+                const productData = await fetchProductData(item.url, item.itemId, item.vendorPartNo);
                 if (productData && productData.productTitle !== "Not Found") {
                     successfulFetchCount++;
                     return productData;
                 } else {
-                    return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", stockStatus: "Not Found" };
+                    return { itemId: item.itemId, vendorPartNo: item.vendorPartNo, productTitle: "Not Found", price: "Not Found", stockStatus: "Not Found" };
                 }
             }));
 
@@ -204,6 +207,7 @@ async function saveResultsToCSV(validResults, unsuccessfulIds) {
     const csvData = validResults.map(item => ({
         Date: today,
         'Item # (Office Depot sku #)': item.itemId,
+        'Vendor Part #': item.vendorPartNo || "Not Found",
         ProductTitle: item.productTitle === "Not Found" ? "Not Found" : item.productTitle,
         Price: item.price === "Not Found" ? "Not Found" : item.price,
         StockAvailability: item.stockStatus === "Not Found" ? "Not Found" : item.stockStatus
@@ -213,6 +217,7 @@ async function saveResultsToCSV(validResults, unsuccessfulIds) {
     const unsuccessfulData = [...new Set(unsuccessfulIds)].map(id => ({
         Date: today,
         'Item # (Office Depot sku #)': id,
+        'Vendor Part #': "Not Found",
         ProductTitle: "Unsuccessful",
         Price: "Unsuccessful",
         StockAvailability: "Unsuccessful"
@@ -254,8 +259,8 @@ async function saveResultsToPostgres(validResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."OfficeDepotTracker" ("trackingDate", "sku", "productTitle", "price", "inStock")
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO "Records"."OfficeDepotTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
+            VALUES ($1, $2, $3, $4, $5, $6)
         `;
 
         const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
@@ -264,6 +269,7 @@ async function saveResultsToPostgres(validResults) {
             const values = [
                 today,
                 item.itemId,
+                item.vendorPartNo || null,
                 item.productTitle,
                 item.price === "Not Found" ? null : parseFloat(item.price.replace(/[^0-9.-]+/g, "")),
                 item.stockStatus

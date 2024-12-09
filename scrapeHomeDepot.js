@@ -15,8 +15,9 @@ async function readUrlsFromFile(filePath) {
 
     return parsedData.map(row => {
         const itemId = row['SKU'];
+        const marketplaceSku = row['Marketplace SKU'];
         const url = `${BASE_URL}${itemId}`;
-        return { url, itemId };
+        return { url, itemId, marketplaceSku };
     });
 }
 
@@ -93,7 +94,12 @@ async function fetchAllProductsData(data) {
                 unsuccessfulIds.push(item.itemId);
             }
 
-            return productData || { itemId: item.itemId, productTitle: "Not Found" };
+            return {
+                ...productData,
+                itemId: item.itemId,
+                marketplaceSku: item.marketplaceSku, // Add this field
+                productTitle: productData?.productTitle || "Not Found"
+            };
         }));
 
         console.log(`Batch ${batchIndex + 1} results saved.`);
@@ -119,6 +125,7 @@ async function saveResultsToCSV(batchResults, unsuccessfulIds) {
     const csvData = batchResults.map(item => ({
         Date: today,
         'Item # (Home Depot sku #)': item.itemId,
+        'Marketplace SKU': item.marketplaceSku || "Not Found", // Include Marketplace SKU
         ProductTitle: item.productTitle,
         Price: item.price || "Not Found",
         StockAvailability: item.stockStatus || "Not Found"
@@ -127,6 +134,7 @@ async function saveResultsToCSV(batchResults, unsuccessfulIds) {
     const unsuccessfulData = unsuccessfulIds.map(id => ({
         Date: today,
         'Item # (Home Depot sku #)': id,
+        'Marketplace SKU': "Not Found", // Handle unsuccessful entries
         ProductTitle: "Unsuccessful",
         Price: "Unsuccessful",
         StockAvailability: "Unsuccessful"
@@ -158,26 +166,26 @@ async function saveResultsToPostgres(validResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."HomeDepotTracker" ("trackingDate", "itemId", "productTitle", "price", "inStock")
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO "Records"."HomeDepotTracker" 
+            ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
+            VALUES ($1, $2, $3, $4, $5, $6)
         `;
 
         const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
 
         for (const item of validResults) {
-            // Handle cases where price is undefined or "Not Found"
+            // Safely handle price and stockStatus
             let price = null;
             if (item.price && item.price !== "Not Found") {
                 price = parseFloat(item.price.replace(/[^0-9.-]+/g, "")); // Safely handle price
             }
-
-            // Handle stockStatus as well
             let stockStatus = item.stockStatus === "Not Found" ? null : item.stockStatus;
 
             // Prepare the values for insertion into PostgreSQL
             const values = [
                 today,
                 item.itemId,
+                item.marketplaceSku || null, // Add marketplaceSku value
                 item.productTitle,
                 price,
                 stockStatus
@@ -193,6 +201,7 @@ async function saveResultsToPostgres(validResults) {
         await client.end();
     }
 }
+
 
 
 async function main() {

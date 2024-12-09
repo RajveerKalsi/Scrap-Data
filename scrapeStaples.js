@@ -13,7 +13,8 @@ async function readUrlsFromFile(filePath) {
 
     return parsedData.map(row => ({
         url: row['PDP Link'] || 'NULL',
-        itemId: row['SKU'].trim()
+        itemId: row['SKU'].trim(),
+        vendorPartNo: row['Vendor Part # '] || null
     }));
 }
 
@@ -65,24 +66,24 @@ function is404Error($) {
 }
 
 
-async function fetchProductData(url, itemId) {
+async function fetchProductData(url, itemId, vendorPartNo) {
     const $ = await fetchData(url);
     if ($) {
         if (is404Error($)) {
-            return { itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found", html: $.html() };
+            return { itemId, vendorPartNo, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found", html: $.html() };
         }
 
         const productTitle = await fetchTitle($);
         const price = await fetchPrice($);
 
         if (!productTitle || !price) {
-            return { itemId, productTitle: "Unsucessful", price: "Unsucessful", isOutOfStock: "Unsucessful" };
+            return { itemId, vendorPartNo, productTitle: "Unsuccessful", price: "Unsuccessful", isOutOfStock: "Unsuccessful" };
         }
 
         const isOutOfStock = checkOutOfStock($);
-        return { itemId, productTitle, price, isOutOfStock, html: $.html() };
+        return { itemId, vendorPartNo, productTitle, price, isOutOfStock, html: $.html() };
     }
-    return { itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+    return { itemId, vendorPartNo, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
 }
 
 async function fetchAllProductsData(data, retries = 50) {
@@ -96,7 +97,6 @@ async function fetchAllProductsData(data, retries = 50) {
     const batchSize = 10;
     const totalBatches = Math.ceil(limit / batchSize);
 
-    // Processing data in batches of 10
     for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
         const batchStart = batchIndex * batchSize;
         const batchEnd = Math.min(batchStart + batchSize, limit);
@@ -109,7 +109,7 @@ async function fetchAllProductsData(data, retries = 50) {
                 item.url = `https://www.staples.com/product_${item.itemId}`;
             }
 
-            const productData = await fetchProductData(item.url, item.itemId);
+            const productData = await fetchProductData(item.url, item.itemId, item.vendorPartNo);
             if (productData) {
                 if (productData.productTitle === "Not Found") {
                     unsuccessfulFetchCount++;
@@ -121,7 +121,7 @@ async function fetchAllProductsData(data, retries = 50) {
             } else {
                 unsuccessfulFetchCount++;
                 unsuccessfulIds.push(item.itemId);
-                return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+                return { itemId: item.itemId, vendorPartNo: item.vendorPartNo, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
             }
         }));
 
@@ -143,28 +143,25 @@ async function fetchAllProductsData(data, retries = 50) {
             console.log(`Missing URL IDs: ${missingUrlIds.join(', ')}`);
         }
 
-        // Retry mechanism for failed URLs (only retry once per batch)
         if (unsuccessfulIds.length > 0) {
             console.log(`Retrying failed URLs in batch ${batchIndex + 1}, attempt 1`);
 
             const failedUrls = batch.filter(item => unsuccessfulIds.includes(item.itemId));
 
             const retryResults = await Promise.all(failedUrls.map(async (item) => {
-                const productData = await fetchProductData(item.url, item.itemId);
+                const productData = await fetchProductData(item.url, item.itemId, item.vendorPartNo);
                 if (productData && productData.productTitle !== "Not Found") {
                     successfulFetchCount++;
                     return productData;
                 } else {
-                    return { itemId: item.itemId, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
+                    return { itemId: item.itemId, vendorPartNo: item.vendorPartNo, productTitle: "Not Found", price: "Not Found", isOutOfStock: "Not Found" };
                 }
             }));
 
             const successfulRetries = retryResults.filter(result => result.productTitle !== "Not Found");
 
-            // Update unsuccessfulIds to remove the successful retries
             unsuccessfulIds = unsuccessfulIds.filter(id => !successfulRetries.some(result => result.itemId === id));
 
-            // Save retry results
             await saveResultsToCSV(successfulRetries, unsuccessfulIds);
             await saveResultsToPostgres(successfulRetries);
 
@@ -174,7 +171,6 @@ async function fetchAllProductsData(data, retries = 50) {
                 console.log(`All failed URLs retried successfully in batch ${batchIndex + 1}`);
             }
 
-            // If there are still failures after the retry, just move to the next batch
             if (unsuccessfulIds.length > 0) {
                 console.log(`Skipping further retries for batch ${batchIndex + 1}. Moving to next batch.`);
             }
@@ -183,6 +179,7 @@ async function fetchAllProductsData(data, retries = 50) {
         console.log(`Batch ${batchIndex + 1} completed.`);
     }
 }
+
 
 
 
@@ -201,6 +198,7 @@ async function saveResultsToCSV(validResults, unsuccessfulIds) {
     const csvData = validResults.map(item => ({
         Date: today,
         'SKU': item.itemId,
+        'Vendor Part #': item.vendorPartNo || 'Not Found',
         ProductTitle: item.productTitle,
         Price: item.price,
         InStock: item.isOutOfStock ? 'Out of Stock' : 'In Stock'
@@ -209,6 +207,7 @@ async function saveResultsToCSV(validResults, unsuccessfulIds) {
     const unsuccessfulData = unsuccessfulIds.map(id => ({
         Date: today,
         'SKU': id,
+        'Vendor Part #': 'Not Found',
         ProductTitle: "Not Found",
         Price: "Not Found",
         InStock: "Not Found"
@@ -249,8 +248,8 @@ async function saveResultsToPostgres(validResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."StaplesTracker" ("trackingDate", "sku", "productTitle", "price", "inStock")
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO "Records"."StaplesTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
+            VALUES ($1, $2, $3, $4, $5, $6)
         `;
 
         const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
@@ -259,6 +258,7 @@ async function saveResultsToPostgres(validResults) {
             const values = [
                 today,
                 item.itemId,
+                item.vendorPartNo || null,
                 item.productTitle,
                 item.price === "Not Found" ? null : parseFloat(item.price.replace(/[^0-9.-]+/g, "")),
                 item.isOutOfStock === "Not Found" ? "Not Found" : (item.isOutOfStock ? 'Out of Stock' : 'In Stock')
