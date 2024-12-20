@@ -6,3 +6,13 @@ scraped_data_quill.csv
 crap.js
 scraped_data_office_depot.csv
 scraped_data_home_depot.csv
+cpi doc
+missing_entries.csv
+missing_values.js
+filtered_vendor_parts.csv
+view_row_details.js
+test_scraped_data_staples.csv
+test_scraped_data_quill.csv
+test_scraped_data_office.csv
+test_scraped_data_home_depot.csv
+test_scraped_data_office_depot.csv
