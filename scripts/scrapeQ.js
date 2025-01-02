@@ -12,9 +12,10 @@ async function readUrlsFromFile(filePath) {
     const parsedData = Papa.parse(csvData, { header: true }).data;
 
     return parsedData.map(row => ({
-        parentSKU: row['Parent Sku'] || null,
-        marketplaceSKU: row['Marketplace SKU'] || null,
-        itemId: row['SKU'],
+        baseFindNum: row['BASE_FIND_NUM'],
+        corporateSku: row['CORPORATE_SKU'],
+        vItemModelNum: row['VITEM_MODEL_NUM'],
+        itemId: row['ABSOLUTE_NUM'],
     }));
 }
 
@@ -25,16 +26,12 @@ async function fetchData(url, retries = 10) {
             const { data } = await axios.get(url);
             return cheerio.load(data);
         } catch (error) {
-            if (error.response) {
-                console.error(`Attempt ${attempt + 1} failed for ${url}: Request failed with status code ${error.response.status}`);
-                if (error.response.status === 500) {
-                    return null; 
-                }
-            } else {
-                // Log non-HTTP errors (like network issues)
-                console.error(`Attempt ${attempt + 1} failed for ${url}: ${error.message}`);
-            }
+            console.error(`Attempt ${attempt + 1} failed for ${url}: ${error.message}`);
             attempt++;
+            if (attempt >= retries) {
+                console.error(`Giving up on ${url} after ${retries} attempts.`);
+                return null;
+            }
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
     }
@@ -42,25 +39,49 @@ async function fetchData(url, retries = 10) {
 }
 
 async function fetchTitle($) {
-    return $('.product-info-ux2dot0__product_title span').first().text().trim();
+    return $('h1').text().trim();
 }
 
 async function fetchPrice($) {
-    return $('.price-info__final_price_sku').text().trim();
+    return $('.h2.mb-2.savings-highlight-wrap').text().trim();
 }
 
 async function fetchStock($) {
-    const outOfStockMessage = $('.purchasing-option-pickers__oos_message').length;
-    return outOfStockMessage > 0 ? "False" : "True";
+    const outOfStockMessage = $('.promo-flag').text().includes('Out of stock');
+    return outOfStockMessage ? "False" : "True"; ;
 }
 
-async function fetchProductData(url, itemId, parentSKU, marketplaceSKU) {
+async function fetchAvailability($) {
+    const availabilityText = $('div.h6.my-3').text().trim();
+
+    if (availabilityText.includes("no longer available") || availabilityText.includes("Choose an alternative")) {
+        return "No";  // Item is unavailable
+    }
+    return "Yes";  // Item is available
+}
+
+
+async function fetchProductData(url, itemId, baseFindNum, corporateSku, vItemModelNum) {
     const $ = await fetchData(url);
     if ($) {
         const productTitle = await fetchTitle($);
         const price = await fetchPrice($);
         const stockStatus = await fetchStock($);
-        return { itemId, parentSKU, marketplaceSKU, productTitle, price, stockStatus, html: $.html() };
+        const availability = await fetchAvailability($);
+
+        if (availability === "No") {
+            return {
+                itemId,
+                baseFindNum,
+                corporateSku,
+                vItemModelNum,
+                productTitle: "Not Found",
+                price: "Not Found",
+                stockStatus: "Not Found",
+            };
+        }
+
+        return { itemId, baseFindNum, corporateSku, vItemModelNum, productTitle, price, stockStatus, availablilty: availability, html: $.html() };
     }
     return null;
 }
@@ -84,13 +105,14 @@ async function fetchAllProductsData(data, retries = 50) {
 
         const batchResults = await Promise.all(batch.map(async (item) => {
             if (!item.itemId || item.itemId.toLowerCase() === 'n/a') {
-                console.log(`Invalid itemId for parentSKU: ${item.parentSKU}, marketplaceSKU: ${item.marketplaceSKU}`);
+                console.log(`Invalid itemId for baseFindNum: ${item.baseFindNum}, corporateSku: ${item.corporateSku}, vItemModelNum: ${item.vItemModelNum}`);
                 missingUrlCount++; 
                 missingUrlIds.push(item.itemId || 'n/a');
                 return {
                     itemId: item.itemId || 'n/a',
-                    parentSKU: item.parentSKU,
-                    marketplaceSKU: item.marketplaceSKU,
+                    baseFindNum: item.baseFindNum,
+                    corporateSku: item.corporateSku,
+                    vItemModelNum: item.vItemModelNum,
                     productTitle: "n/a",
                     price: "n/a",
                     stockStatus: "n/a"
@@ -98,9 +120,9 @@ async function fetchAllProductsData(data, retries = 50) {
             }
 
             // Construct the URL using itemId
-            item.url = `https://www.staples.com/product_${item.itemId}`;
+            item.url = `https://www.quill.com/${item.vitemModelNum}/cbs/${item.itemId}.html`;
 
-            const productData = await fetchProductData(item.url, item.itemId, item.parentSKU, item.marketplaceSKU);
+            const productData = await fetchProductData(item.url, item.itemId, item.baseFindNum, item.corporateSku, item.vItemModelNum);
 
             if (productData && productData.productTitle !== "Not Found") {
                 successfulFetchCount++;
@@ -110,8 +132,9 @@ async function fetchAllProductsData(data, retries = 50) {
 
             return productData || {
                 itemId: item.itemId,
-                parentSKU: item.parentSKU,
-                marketplaceSKU: item.marketplaceSKU,
+                baseFindNum: item.baseFindNum,
+                corporateSku: item.corporateSku,
+                vItemModelNum: item.vItemModelNum,
                 productTitle: "Not Found",
                 price: "Not Found",
                 stockStatus: "Not Found"
@@ -151,8 +174,9 @@ async function saveResultsToCSV(allResults) {
     const csvData = allResults.map(item => ({
         Date: today,
         ItemId: item.itemId || 'n/a',
-        'Parent SKU': item.parentSKU || 'Not Found',
-        'Marketplace SKU': item.marketplaceSKU || 'Not Found',
+        'Base Find Num': item.baseFindNum || 'Not Found',
+        'Corporate Sku': item.corporateSku || 'Not Found',
+        'V Item Model Num': item.vItemModelNum || 'Not Found',
         ProductTitle: item.productTitle || 'Not Found',
         Price: item.price || 'Not Found',
         StockAvailability: item.stockStatus || 'Not Found'
@@ -160,7 +184,7 @@ async function saveResultsToCSV(allResults) {
 
     const csv = Papa.unparse(csvData);
 
-    const filePath = 'test_scraped_data_staples.csv';
+    const filePath = 'test_scraped_data_quill.csv';
 
     // Append to the existing CSV if it exists; otherwise, create a new one
     if (fs.existsSync(filePath)) {
@@ -182,7 +206,7 @@ async function saveResultsToPostgres(batchResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."StaplesTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
+            INSERT INTO "Records"."QuillTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
             VALUES ($1, $2, $3, $4, $5, $6)
         `;
 
@@ -192,7 +216,7 @@ async function saveResultsToPostgres(batchResults) {
             const values = [
                 today,
                 item.itemId || 'n/a',
-                item.marketplaceSKU || null,
+                item.vItemModelNum,
                 item.productTitle || "Not Found",
                 item.price === "n/a" ? null : parseFloat(item.price.replace(/[^0-9.-]+/g, "")),
                 item.stockStatus || "Not Found"
@@ -210,12 +234,12 @@ async function saveResultsToPostgres(batchResults) {
 
 
 async function main() {
-    const filePath = 'staplesSKU.csv';
+    const filePath = 'C:\\VS Code\\Scrap Data\\csvs\\quillSKU.csv';
 
     const data = await readUrlsFromFile(filePath);
     if (data.length > 0) {
         data.forEach(item => {
-            console.log(`ItemId: ${item.itemId} - PDP Link: ${item.url}`);
+            console.log(`ItemId: ${item.itemId} - VItemModelNum: ${item.vItemModelNum}`);
         });
         await fetchAllProductsData(data);
     } else {

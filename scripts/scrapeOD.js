@@ -238,7 +238,7 @@ async function saveResultsToPostgres(batchResults) {
 
 
 async function main() {
-    const filePath = 'officeDepotSKU.csv';
+    const filePath = 'C:\\VS Code\\Scrap Data\\csvs\\officeDepotSKU.csv';
 
     const data = await readUrlsFromFile(filePath);
     if (data.length > 0) {

@@ -25,12 +25,16 @@ async function fetchData(url, retries = 10) {
             const { data } = await axios.get(url);
             return cheerio.load(data);
         } catch (error) {
-            console.error(`Attempt ${attempt + 1} failed for ${url}: ${error.message}`);
-            attempt++;
-            if (attempt >= retries) {
-                console.error(`Giving up on ${url} after ${retries} attempts.`);
-                return null;
+            if (error.response) {
+                console.error(`Attempt ${attempt + 1} failed for ${url}: Request failed with status code ${error.response.status}`);
+                if (error.response.status === 500) {
+                    return null; 
+                }
+            } else {
+                // Log non-HTTP errors (like network issues)
+                console.error(`Attempt ${attempt + 1} failed for ${url}: ${error.message}`);
             }
+            attempt++;
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
     }
@@ -38,20 +42,17 @@ async function fetchData(url, retries = 10) {
 }
 
 async function fetchTitle($) {
-    return $('h1.sui-h4-bold').text().trim();
+    return $('.product-info-ux2dot0__product_title span').first().text().trim();
 }
 
 async function fetchPrice($) {
-    const dollars = $('.sui-text-9xl').text().trim();
-    const cents = $('.sui-font-display.sui-text-3xl').last().text().trim();
-    return `$${dollars}.${cents}`;
+    return $('.price-info__final_price_sku').text().trim();
 }
 
 async function fetchStock($) {
-    const outOfStockMessage = $('div.sui-my-12.sui-mx-auto.sui-p-5.sui-text-danger.sui-font-bold').length;
+    const outOfStockMessage = $('.purchasing-option-pickers__oos_message').length;
     return outOfStockMessage > 0 ? "False" : "True";
 }
-
 
 async function fetchProductData(url, itemId, parentSKU, marketplaceSKU) {
     const $ = await fetchData(url);
@@ -97,7 +98,7 @@ async function fetchAllProductsData(data, retries = 50) {
             }
 
             // Construct the URL using itemId
-            item.url = `https://www.homedepot.com/p/${item.itemId}`;
+            item.url = `https://www.staples.com/product_${item.itemId}`;
 
             const productData = await fetchProductData(item.url, item.itemId, item.parentSKU, item.marketplaceSKU);
 
@@ -159,7 +160,7 @@ async function saveResultsToCSV(allResults) {
 
     const csv = Papa.unparse(csvData);
 
-    const filePath = 'test_scraped_data_home_depot.csv';
+    const filePath = 'test_scraped_data_staples.csv';
 
     // Append to the existing CSV if it exists; otherwise, create a new one
     if (fs.existsSync(filePath)) {
@@ -181,7 +182,7 @@ async function saveResultsToPostgres(batchResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."HomeDepotTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
+            INSERT INTO "Records"."StaplesTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
             VALUES ($1, $2, $3, $4, $5, $6)
         `;
 
@@ -209,7 +210,7 @@ async function saveResultsToPostgres(batchResults) {
 
 
 async function main() {
-    const filePath = 'homeDepotSKU.csv';
+    const filePath = 'C:\\VS Code\\Scrap Data\\csvs\\staplesSKU.csv';
 
     const data = await readUrlsFromFile(filePath);
     if (data.length > 0) {
@@ -221,13 +222,5 @@ async function main() {
         console.log("No data found in file.");
     }
 }
-
-// cron.schedule('0 23 * * *', async () => {
-//     console.log("Starting scheduled task...");
-//     await main();
-//     console.log("Scheduled task completed.");
-// }, {
-//     timezone: "Asia/Kolkata"
-// });
 
 main();
