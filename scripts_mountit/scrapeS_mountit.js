@@ -22,8 +22,34 @@ async function fetchData(url, retries = 10) {
     let attempt = 0;
     while (attempt < retries) {
         try {
-            const { data } = await axios.get(url);
-            return cheerio.load(data);
+            const response = await axios.post(
+                "https://scraper-api.smartproxy.com/v2/scrape",
+                {
+                    target: "universal",
+                    url,
+                    headless: "html",
+                    geo: "United States",
+                    locale: "en-us",
+                    domain: "com",
+                    device_type: "desktop_chrome",
+                    force_headers: true,
+                    force_cookies: true,
+                },
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Basic VTAwMDAxNDUyNjI6RTZvanNmMmV1OGh3VlI1RGpq}`,
+                    },
+                }
+            );
+            
+            if (response.data && response.data.results && response.data.results[0].content) {
+                return cheerio.load(response.data.results[0].content); // Load HTML into Cheerio
+            } else {
+                console.error("Invalid response format:", response.data);
+                return null;
+            }
+            
         } catch (error) {
             if (error.response) {
                 console.error(`Attempt ${attempt + 1} failed for ${url}: Request failed with status code ${error.response.status}`);
@@ -60,9 +86,31 @@ async function fetchProductData(url, itemId, parentSKU, marketplaceSKU) {
         const productTitle = await fetchTitle($);
         const price = await fetchPrice($);
         const stockStatus = await fetchStock($);
+
+        // Save the HTML content to a file
+        // await saveHtmlContentToFile($.html(), itemId);
+
         return { itemId, parentSKU, marketplaceSKU, productTitle, price, stockStatus, html: $.html() };
     }
     return null;
+}
+
+
+async function saveHtmlContentToFile(content, itemId) {
+    const fileName = `product_${itemId}.html`;
+    const filePath = `./html_files/${fileName}`;
+
+    // Ensure the directory exists
+    if (!fs.existsSync('./html_files')) {
+        fs.mkdirSync('./html_files');
+    }
+
+    try {
+        fs.writeFileSync(filePath, content);
+        console.log(`HTML content for ItemId ${itemId} saved to ${filePath}`);
+    } catch (error) {
+        console.error("Error saving HTML content:", error);
+    }
 }
 
 async function fetchAllProductsData(data, retries = 50) {
@@ -72,7 +120,7 @@ async function fetchAllProductsData(data, retries = 50) {
     const missingUrlIds = [];
     let missingUrlCount = 0;
 
-    const limit = process.env.NODE_ENV === 'DEV' ? 20 : data.length;
+    const limit = process.env.NODE_ENV === 'DEV' ? 2 : data.length;
     const batchSize = 10;
     const totalBatches = Math.ceil(limit / batchSize);
 
@@ -121,7 +169,7 @@ async function fetchAllProductsData(data, retries = 50) {
         const validResults = batchResults.filter(data => data);
 
         // Saving results to CSV and Postgres
-        await saveResultsToCSV(validResults);
+        // await saveResultsToCSV(validResults);
         await saveResultsToPostgres(batchResults);
 
         // Logging batch details
@@ -160,7 +208,7 @@ async function saveResultsToCSV(allResults) {
 
     const csv = Papa.unparse(csvData);
 
-    const filePath = 'test_scraped_data_staples.csv';
+    const filePath = 'test_scraped_data_staples_mountit.csv';
 
     // Append to the existing CSV if it exists; otherwise, create a new one
     if (fs.existsSync(filePath)) {
@@ -182,11 +230,12 @@ async function saveResultsToPostgres(batchResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."StaplesTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO "Records"."StaplesTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock", "brandName")
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
         `;
 
         const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+        const brandName = 'Mountit';
 
         for (const item of batchResults) {
             const values = [
@@ -195,7 +244,8 @@ async function saveResultsToPostgres(batchResults) {
                 item.marketplaceSKU || null,
                 item.productTitle || "Not Found",
                 item.price === "n/a" ? null : parseFloat(item.price.replace(/[^0-9.-]+/g, "")),
-                item.stockStatus || "Not Found"
+                item.stockStatus || "Not Found",
+                brandName
             ];
             await client.query(queryText, values);
         }
@@ -210,7 +260,7 @@ async function saveResultsToPostgres(batchResults) {
 
 
 async function main() {
-    const filePath = 'C:\\VS Code\\Scrap Data\\csvs\\staplesSKU.csv';
+    const filePath = 'C:\\VS Code\\Scrap Data\\csvs_mountit\\staplesSKU.csv';
 
     const data = await readUrlsFromFile(filePath);
     if (data.length > 0) {

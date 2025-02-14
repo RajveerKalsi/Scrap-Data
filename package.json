@@ -6,9 +6,12 @@
     "dotenv": "^16.4.5",
     "fs": "^0.0.1-security",
     "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2",
     "papaparse": "^5.4.1",
     "pg": "^8.13.1",
-    "puppeteer": "^23.6.1",
+    "puppeteer": "^23.11.1",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "xlsx": "^0.18.5"
   }
 }

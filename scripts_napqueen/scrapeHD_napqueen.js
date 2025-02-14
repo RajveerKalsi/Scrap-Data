@@ -2,8 +2,7 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const fs = require('fs');
 const Papa = require('papaparse');
-const { Client } = require('pg');
-const cron = require('node-cron');
+const { Client } = require('pg')
 
 require('dotenv').config();
 
@@ -12,9 +11,9 @@ async function readUrlsFromFile(filePath) {
     const parsedData = Papa.parse(csvData, { header: true }).data;
 
     return parsedData.map(row => ({
-        parentSKU: row['Parent Sku'] || null,
-        marketplaceSKU: row['Marketplace SKU'] || null,
-        itemId: row['SKU'],
+        parentSKU: row['Parent SKU'] || null,
+        marketplaceSKU: row['SKU'] || null,
+        itemId: row['ItemID'],
     }));
 }
 
@@ -38,57 +37,29 @@ async function fetchData(url, retries = 10) {
 }
 
 async function fetchTitle($) {
-    return $('h1[itemprop="name"]').text().trim();
+    return $('h1.sui-h4-bold').text().trim();
 }
 
 async function fetchPrice($) {
-    return $('.od-graphql-price-big-price').first().text().trim();
+    const dollars = $('.sui-text-9xl').text().trim();
+    const cents = $('.sui-font-display.sui-text-3xl').last().text().trim();
+    return `$${dollars}.${cents}`;
 }
 
 async function fetchStock($) {
-    const addToCartButton = $('.call-to-action-wrapper .common-add-to-cart');
-    return addToCartButton.length > 0 ? "True" : "False";
+    const outOfStockMessage = $('div.sui-my-12.sui-mx-auto.sui-p-5.sui-text-danger.sui-font-bold').length;
+    return outOfStockMessage > 0 ? "False" : "True";
 }
 
 
-async function fetchProductData(url, itemId, marketplaceSKU, parentSKU, failedItems = new Set()) {
-    if (failedItems.has(itemId)) {
-        return {
-            itemId,
-            parentSKU,
-            marketplaceSKU,
-            productTitle: "Unsuccessful",
-            price: "Unsuccessful",
-            stockStatus: "Unsuccessful",
-            html: "Unsuccessful"
-        };
-    }
-
+async function fetchProductData(url, itemId, parentSKU, marketplaceSKU) {
     const $ = await fetchData(url);
     if ($) {
-        const unavailableMessage = $('h1:contains("We are sorry, but Office Depot is currently not available in your country")').length > 0;
-        const notFoundMessage = $('h1[auid="sku-failure-heading"]').length > 0;
-
-        if (unavailableMessage || notFoundMessage) {
-            failedItems.add(itemId); // Mark as failed to avoid future retries
-            return {
-                itemId,
-                parentSKU,
-                marketplaceSKU,
-                productTitle: "Not Found",
-                price: "Not Found",
-                stockStatus: "Not Found",
-                html: $.html()
-            };
-        }
-
         const productTitle = await fetchTitle($);
         const price = await fetchPrice($);
         const stockStatus = await fetchStock($);
-
         return { itemId, parentSKU, marketplaceSKU, productTitle, price, stockStatus, html: $.html() };
     }
-
     return null;
 }
 
@@ -112,7 +83,7 @@ async function fetchAllProductsData(data, retries = 50) {
         const batchResults = await Promise.all(batch.map(async (item) => {
             if (!item.itemId || item.itemId.toLowerCase() === 'n/a') {
                 console.log(`Invalid itemId for parentSKU: ${item.parentSKU}, marketplaceSKU: ${item.marketplaceSKU}`);
-                missingUrlCount++; // Increment missing URL count for 'n/a'
+                missingUrlCount++; 
                 missingUrlIds.push(item.itemId || 'n/a');
                 return {
                     itemId: item.itemId || 'n/a',
@@ -125,14 +96,14 @@ async function fetchAllProductsData(data, retries = 50) {
             }
 
             // Construct the URL using itemId
-            item.url = `https://www.officedepot.com/a/products/${item.itemId}`;
+            item.url = `https://www.homedepot.com/p/${item.itemId}`;
 
             const productData = await fetchProductData(item.url, item.itemId, item.parentSKU, item.marketplaceSKU);
 
             if (productData && productData.productTitle !== "Not Found") {
-                successfulFetchCount++; 
+                successfulFetchCount++;
             } else {
-                unsuccessfulFetchCount++; 
+                unsuccessfulFetchCount++;
             }
 
             return productData || {
@@ -149,7 +120,7 @@ async function fetchAllProductsData(data, retries = 50) {
 
         // Saving results to CSV and Postgres
         await saveResultsToCSV(validResults);
-        await saveResultsToPostgres(batchResults);
+        // await saveResultsToPostgres(batchResults);
 
         // Logging batch details
         console.log(`Batch ${batchIndex + 1} processed:`);
@@ -160,7 +131,6 @@ async function fetchAllProductsData(data, retries = 50) {
             console.log(`Unsuccessful fetch IDs: ${unsuccessfulIds.join(', ')}`);
         }
     }
-
 }
 
 
@@ -188,7 +158,7 @@ async function saveResultsToCSV(allResults) {
 
     const csv = Papa.unparse(csvData);
 
-    const filePath = 'test_scraped_data_office_depot.csv';
+    const filePath = 'test_scraped_data_home_depot_napqueen.csv';
 
     // Append to the existing CSV if it exists; otherwise, create a new one
     if (fs.existsSync(filePath)) {
@@ -210,11 +180,12 @@ async function saveResultsToPostgres(batchResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."OfficeDepotTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock")
-            VALUES ($1, $2, $3, $4, $5, $6)
+            INSERT INTO "Records"."HomeDepotTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock", "brandName")
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
         `;
 
         const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
+        const brandName = 'Napqueen';
 
         for (const item of batchResults) {
             const values = [
@@ -223,7 +194,8 @@ async function saveResultsToPostgres(batchResults) {
                 item.marketplaceSKU || null,
                 item.productTitle || "Not Found",
                 item.price === "n/a" ? null : parseFloat(item.price.replace(/[^0-9.-]+/g, "")),
-                item.stockStatus || "Not Found"
+                item.stockStatus || "Not Found",
+                brandName
             ];
             await client.query(queryText, values);
         }
@@ -238,7 +210,7 @@ async function saveResultsToPostgres(batchResults) {
 
 
 async function main() {
-    const filePath = 'C:\\VS Code\\Scrap Data\\csvs\\officeDepotSKU.csv';
+    const filePath = 'C:\\VS Code\\Scrap Data\\csvs_napqueen\\homedepotSKU.csv';
 
     const data = await readUrlsFromFile(filePath);
     if (data.length > 0) {
@@ -250,13 +222,5 @@ async function main() {
         console.log("No data found in file.");
     }
 }
-
-// cron.schedule('0 23 * * *', async () => {
-//     console.log("Starting scheduled task...");
-//     await main();
-//     console.log("Scheduled task completed.");
-// }, {
-//     timezone: "Asia/Kolkata"
-// });
 
 main();

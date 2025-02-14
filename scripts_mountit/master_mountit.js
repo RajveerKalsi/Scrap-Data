@@ -2,7 +2,7 @@ const { exec } = require('child_process');
 const path = require('path');
 
 // Define the scripts to run
-const scripts = ['scrapeQ.js', 'scrapeS.js', 'scrapeHD.js', 'scrapeOD.js'];
+const scripts = ['scrapeQ_mountit.js', 'scrapeS_mountit.js', 'scrapeHD_mountit.js', 'scrapeOD_mountit.js', 'scrapeBnH_mountit.js'];
 const scriptPath = __dirname; // Directory where this script is located
 
 async function runScripts() {
