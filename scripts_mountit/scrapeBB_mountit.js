@@ -69,8 +69,8 @@ async function fetchAllProductsData(productList) {
 
         if (results.length >= 10 || i === productList.length - 1) {
             console.log("Saving batch to database...");
-            await saveResultsToPostgres(results);
-            // await saveResultsToCSV(results, 'test_scraped_data_bestbuy_mountit.csv');
+            // await saveResultsToPostgres(results);
+            await saveResultsToCSV(results, 'test_scraped_data_bestbuy_mountit.csv');
             results = [];
         }
     }
@@ -154,7 +154,7 @@ async function saveResultsToPostgres(results) {
 }
 
 async function main() {
-    const filePath = 'C:\\VS Code\\Scrap Data\\csvs_mountit\\bbSKU.csv';
+    const filePath = '../csvs_mountit/bbSKU.csv';
 
     const data = await readUrlsFromFile(filePath);
     const limit = process.env.NODE_ENV === 'DEV' ? 2 : data.length;

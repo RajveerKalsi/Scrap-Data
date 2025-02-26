@@ -159,7 +159,7 @@ async function saveResultsToCSV(allResults) {
 
     const csv = Papa.unparse(csvData);
 
-    const filePath = 'test_scraped_data_home_depot_mountit.csv';
+    const filePath = '../csvs_mountit/homeDepotSKU.csv';
 
     // Append to the existing CSV if it exists; otherwise, create a new one
     if (fs.existsSync(filePath)) {
@@ -211,7 +211,7 @@ async function saveResultsToPostgres(batchResults) {
 
 
 async function main() {
-    const filePath = 'C:\\VS Code\\Scrap Data\\csvs_mountit\\homeDepotSKU.csv';
+    const filePath = '../csvs_mountit/homeDepotSKU.csv';
 
     const data = await readUrlsFromFile(filePath);
     if (data.length > 0) {

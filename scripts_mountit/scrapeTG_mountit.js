@@ -4,7 +4,7 @@ const Papa = require('papaparse');
 const { Client } = require('pg');
 require('dotenv').config();
 
-const INPUT_CSV = 'C:\\VS Code\\Scrap Data\\csvs_mountit\\targetPlusSKU.csv'; // Change this to your actual input file
+const INPUT_CSV = '../csvs_mountit/targetPlusSKU.csv'; 
 const OUTPUT_CSV = 'scraped_data.csv';
 
 async function scrapeTarget(productId, page, maxRetries = 10) {

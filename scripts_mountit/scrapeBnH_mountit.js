@@ -193,7 +193,7 @@ async function saveResultsToPostgres(batchResults) {
 
 
 async function main() {
-    const filePath = 'C:\\VS Code\\Scrap Data\\csvs_mountit\\b&hSKU.csv';
+    const filePath = '../csvs_mountit/b&hSKU.csv';
 
     const data = await readUrlsFromFile(filePath);
 

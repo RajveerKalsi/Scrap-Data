@@ -223,7 +223,7 @@ async function saveResultsToPostgres(batchResults) {
 }
 
 async function main() {
-    const filePath = 'C:\\VS Code\\Scrap Data\\csvs_mountit\\newEggSKU.csv';
+    const filePath = '../csvs_mountit/newEggSKU.csv';
 
     const data = await readUrlsFromFile(filePath);
     if (data.length > 0) {
