@@ -45,7 +45,7 @@ async function runScripts() {
     console.log('All scripts executed. Check logs for details.');
 }
 
-schedule.scheduleJob('30 15 * * *', () => {
+schedule.scheduleJob('30 16 * * *', () => {
     console.log('Starting scheduled script execution...');
     runScripts().catch(err => {
         console.error('An unexpected error occurred during execution:', err);
