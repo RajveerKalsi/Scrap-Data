@@ -1,9 +1,13 @@
+const express = require('express');
 const { exec } = require('child_process');
 const path = require('path');
+const schedule = require('node-schedule');
 
-// Define the scripts to run
-const scripts = ['scrapeQ_mountit.js', 'scrapeS_mountit.js', 'scrapeHD_mountit.js', 'scrapeOD_mountit.js', 'scrapeBnH_mountit.js'];
-const scriptPath = __dirname; // Directory where this script is located
+const app = express();
+const PORT = 3000;
+
+const scripts = ['scrapeTG_mountit.js','scrapeNE_mountit.js','scrapeBB_mountit.js','scrapeQ_mountit.js', 'scrapeS_mountit.js', 'scrapeHD_mountit.js', 'scrapeOD_mountit.js', 'scrapeBnH_mountit.js'];
+const scriptPath = __dirname;
 
 async function runScripts() {
     for (const script of scripts) {
@@ -15,7 +19,6 @@ async function runScripts() {
                 const command = `$env:NODE_ENV="PROD"; node "${fullPath}"`;
                 const process = exec(command, { shell: 'powershell.exe' });
 
-                // Stream script output directly to the console
                 process.stdout.on('data', (data) => {
                     console.log(`[${script}]: ${data}`);
                 });
@@ -42,6 +45,22 @@ async function runScripts() {
     console.log('All scripts executed. Check logs for details.');
 }
 
-runScripts().catch(err => {
-    console.error('An unexpected error occurred during execution:', err);
+schedule.scheduleJob('30 15 * * *', () => {
+    console.log('Starting scheduled script execution...');
+    runScripts().catch(err => {
+        console.error('An unexpected error occurred during execution:', err);
+    });
 });
+
+app.get('/run-scripts', (req, res) => {
+    console.log('Manual execution triggered via API.');
+    runScripts()
+        .then(() => res.send('Scripts executed successfully.'))
+        .catch(err => res.status(500).send(`Error: ${err.message}`));
+});
+
+app.listen(PORT, () => {
+    console.log(`Server is running on http://localhost:${PORT}`);
+});
+
+console.log('Scheduler is running. Waiting for the scheduled time...');
