@@ -84,30 +84,34 @@ async function fetchProductData(url, parentSKU, marketplaceSKU) {
 }
 
 
-async function fetchAllProductsData(data) {
-    const results = [];
+async function fetchAllProductsData(data, batchSize = 10) {
+    for (let i = 0; i < data.length; i += batchSize) {
+        const batch = data.slice(i, i + batchSize);
+        const results = [];
 
-    for (const item of data) {
-        if (!item.link) {
-            console.log(`Missing URL for parentSKU: ${item.parentSKU}, marketplaceSKU: ${item.marketplaceSKU}`);
-            results.push({
-                parentSKU: item.parentSKU,
-                marketplaceSKU: item.marketplaceSKU,
-                productTitle: "Not Found",
-                price: "Not Found",
-                stockStatus: "Not Found",
-            });
-            continue;
+        for (const item of batch) {
+            if (!item.link) {
+                console.log(`Missing URL for parentSKU: ${item.parentSKU}, marketplaceSKU: ${item.marketplaceSKU}`);
+                results.push({
+                    parentSKU: item.parentSKU,
+                    marketplaceSKU: item.marketplaceSKU,
+                    productTitle: "Not Found",
+                    price: "Not Found",
+                    stockStatus: "Not Found",
+                });
+                continue;
+            }
+
+            console.log(`Fetching data for URL: ${item.link}`);
+            const productData = await fetchProductData(item.link, item.parentSKU, item.marketplaceSKU);
+            results.push(productData);
         }
-
-        console.log(`Fetching data for URL: ${item.link}`);
-        const productData = await fetchProductData(item.link, item.parentSKU, item.marketplaceSKU);
-        results.push(productData);
+        // await saveResultsToCSV(results);
+        await saveResultsToPostgres(results);
+        console.log(`Batch ${Math.floor(i / batchSize) + 1} processed.`);
     }
-
-    // await saveResultsToCSV(results);
-    await saveResultsToPostgres(results);
 }
+
 
 async function saveResultsToCSV(allResults) {
     const today = new Date().toLocaleString('en-US', {
@@ -204,7 +208,7 @@ async function main() {
         limitedData.forEach(item => {
             console.log(`PDP Link: ${item.link}`);
         });
-        await fetchAllProductsData(limitedData);
+        await fetchAllProductsData(limitedData, 10);
     } else {
         console.log("No data found in file.");
     }

@@ -69,8 +69,8 @@ async function fetchAllProductsData(productList) {
 
         if (results.length >= 10 || i === productList.length - 1) {
             console.log("Saving batch to database...");
-            // await saveResultsToPostgres(results);
-            await saveResultsToCSV(results, 'test_scraped_data_bestbuy_mountit.csv');
+            await saveResultsToPostgres(results);
+            // await saveResultsToCSV(results, 'test_scraped_data_bestbuy_mountit.csv');
             results = [];
         }
     }

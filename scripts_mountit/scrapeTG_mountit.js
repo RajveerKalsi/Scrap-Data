@@ -4,13 +4,29 @@ const Papa = require('papaparse');
 const { Client } = require('pg');
 require('dotenv').config();
 
-const INPUT_CSV = '../csvs_mountit/targetPlusSKU.csv'; 
+const INPUT_CSV = 'C:\\VS Code\\Scrap Data\\csvs_mountit\\targetPlusSKU.csv'; // Change this to your actual input file
 const OUTPUT_CSV = 'scraped_data.csv';
 
-async function scrapeTarget(productId, page, maxRetries = 10) {
+async function readCSV(filePath) {
+    const csvData = fs.readFileSync(filePath, 'utf8');
+    const parsedData = Papa.parse(csvData, { header: true }).data;
+
+    return parsedData
+        .map(row => ({
+            parentSKU: row['Parent Sku']?.trim() || null,
+            marketplaceSKU: row['Marketplace SKU']?.trim() || null,
+            productId: row['SKU']?.trim(), // Ensure it's a valid string
+        }))
+        .filter(product => product.productId); // Filter out missing SKUs
+}
+
+async function scrapeTarget(productId, page) {
     console.log(`🔍 Scraping Product ID: ${productId}`);
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+
+    let attempts = 0;
+    const maxRetries = 10;
+
+    while (attempts < maxRetries) {
         try {
             await page.goto('https://www.target.com', { waitUntil: 'domcontentloaded' });
 
@@ -49,18 +65,20 @@ async function scrapeTarget(productId, page, maxRetries = 10) {
             });
 
             return { productId, ...productData };
+
         } catch (error) {
-            console.log(`⚠️ Attempt ${attempt} failed for Product ID: ${productId}, Retrying...`);
-            if (attempt < maxRetries) {
-                await new Promise(resolve => setTimeout(resolve, 2000)); // Delay before retrying
-            } else {
-                console.log(`❌ Max retries reached for Product ID: ${productId}`);
+            attempts++;
+            console.warn(`⚠️ Attempt ${attempts} failed for Product ID: ${productId}`);
+
+            if (attempts === maxRetries) {
+                console.error(`❌ Maximum retries reached for Product ID: ${productId}`);
                 return { productId, name: "N/A", price: "N/A", stock: "Error" };
             }
+
+            await new Promise(resolve => setTimeout(resolve, 2000));
         }
     }
 }
-
 
 async function scrapeBatch(productBatch, page) {
     console.log(`\n🚀 Starting new batch of ${productBatch.length} products...\n`);
