@@ -60,7 +60,8 @@ async function fetchProductData(url, itemId, marketplaceSKU, parentSKU, failedIt
             productTitle: "Unsuccessful",
             price: "Unsuccessful",
             stockStatus: "Unsuccessful",
-            html: "Unsuccessful"
+            html: "Unsuccessful",
+            url
         };
     }
 
@@ -78,7 +79,8 @@ async function fetchProductData(url, itemId, marketplaceSKU, parentSKU, failedIt
                 productTitle: "Not Found",
                 price: "Not Found",
                 stockStatus: "Not Found",
-                html: $.html()
+                html: $.html(),
+                url
             };
         }
 
@@ -86,7 +88,7 @@ async function fetchProductData(url, itemId, marketplaceSKU, parentSKU, failedIt
         const price = await fetchPrice($);
         const stockStatus = await fetchStock($);
 
-        return { itemId, parentSKU, marketplaceSKU, productTitle, price, stockStatus, html: $.html() };
+        return { itemId, parentSKU, marketplaceSKU, productTitle, price, stockStatus, html: $.html(), url };
     }
 
     return null;
@@ -99,7 +101,7 @@ async function fetchAllProductsData(data, retries = 50) {
     const missingUrlIds = [];
     let missingUrlCount = 0;
 
-    const limit = process.env.NODE_ENV === 'DEV' ? 2 : data.length;
+    const limit = process.env.NODE_ENV === 'DEV' ? 10 : data.length;
     const batchSize = 10;
     const totalBatches = Math.ceil(limit / batchSize);
 
@@ -141,15 +143,15 @@ async function fetchAllProductsData(data, retries = 50) {
                 marketplaceSKU: item.marketplaceSKU,
                 productTitle: "Not Found",
                 price: "Not Found",
-                stockStatus: "Not Found"
+                stockStatus: "Not Found",
             };
         }));
 
         const validResults = batchResults.filter(data => data);
 
         // Saving results to CSV and Postgres
-        // await saveResultsToCSV(validResults);
-        await saveResultsToPostgres(batchResults);
+        await saveResultsToCSV(validResults);
+        // await saveResultsToPostgres(batchResults);
 
         // Logging batch details
         console.log(`Batch ${batchIndex + 1} processed:`);
@@ -184,7 +186,7 @@ async function saveResultsToCSV(allResults) {
         ProductTitle: item.productTitle || 'Not Found',
         Price: item.price || 'Not Found',
         StockAvailability: item.stockStatus || 'Not Found',
-        URL: item.url || "n/a",
+        url: item.url || "n/a",
     }));
 
     const csv = Papa.unparse(csvData);
