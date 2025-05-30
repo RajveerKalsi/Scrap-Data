@@ -183,7 +183,8 @@ async function saveResultsToCSV(allResults) {
         'Marketplace SKU': item.marketplaceSKU || 'Not Found',
         ProductTitle: item.productTitle || 'Not Found',
         Price: item.price || 'Not Found',
-        StockAvailability: item.stockStatus || 'Not Found'
+        StockAvailability: item.stockStatus || 'Not Found',
+        URL: item.url || "n/a",
     }));
 
     const csv = Papa.unparse(csvData);
