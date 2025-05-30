@@ -39,7 +39,7 @@ async function fetchData(url, retries = 10) {
                 {
                     headers: {
                         "Content-Type": "application/json",
-                        Authorization: `Basic VTAwMDAxNDY0ODg6UFcxYjU5NjI1NmIwNzk0ZjlkNGEyZjRhYmFkZmRkZDUzZjQ=`,
+                        Authorization: `Basic VTAwMDAxNDUyNjI6RTZvanNmMmV1OGh3VlI1RGpq`,
                     },
                 }
             );
