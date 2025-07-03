@@ -197,6 +197,7 @@ async function fetchAllProductsData(data, retries = 50) {
             productTitle: "Not Found",
             price: "Not Found",
             stockStatus: "Not Found",
+            url: item.url || "n/a",
           }
         );
       })
@@ -205,8 +206,8 @@ async function fetchAllProductsData(data, retries = 50) {
     // const validResults = batchResults.filter((data) => data);
 
     // Saving results to CSV and Postgres
-    await saveResultsToCSV(batchResults);
-    // await saveResultsToPostgres(batchResults);
+    // await saveResultsToCSV(batchResults);
+    await saveResultsToPostgres(batchResults);
 
     // Logging batch details
     console.log(`Batch ${batchIndex + 1} processed:`);
@@ -268,8 +269,8 @@ async function saveResultsToPostgres(batchResults) {
   try {
     await client.connect();
     const queryText = `
-            INSERT INTO "Records"."StaplesTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock", "brandName")
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO "Records"."StaplesTracker" ("trackingDate", "itemId", "parentSku", "marketplaceSku", "productTitle", "price", "inStock", "url", "brandName")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `;
 
     const today = new Date().toLocaleString("en-US", {
@@ -287,10 +288,12 @@ async function saveResultsToPostgres(batchResults) {
       const values = [
         today,
         item.itemId || "n/a",
+        item.parentSKU || null,
         item.marketplaceSKU || null,
         item.productTitle || "Not Found",
         numericPrice,
         item.stockStatus || "Not Found",
+        item.url || "n/a",
         brandName,
       ];
       await client.query(queryText, values);
@@ -305,7 +308,7 @@ async function saveResultsToPostgres(batchResults) {
 }
 
 async function main() {
-  const filePath = "../csvs_mountit/staplesSKU.csv";
+  const filePath = "../csvs_mountit/staplesSKUNew.csv";
 
   const data = await readUrlsFromFile(filePath);
   if (data.length > 0) {

@@ -124,6 +124,7 @@ async function fetchAllProductsData(data) {
                     productTitle: productData.title,
                     price: productData.price,
                     stockStatus: productData.stock,
+                    url: item.url,
                 };
             }
             return null;
@@ -191,8 +192,8 @@ async function saveResultsToPostgres(batchResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."NewEggTracker" ("trackingDate", "itemId", "parentSku", "marketplaceSku", "productTitle", "price", "inStock", "brandName")
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO "Records"."NewEggTracker" ("trackingDate", "itemId", "parentSku", "marketplaceSku", "productTitle", "price", "inStock", "url", "brandName")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `;
 
         const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
@@ -209,6 +210,7 @@ async function saveResultsToPostgres(batchResults) {
                     ? parseFloat(item.price.replace(/[^0-9.-]+/g, ""))
                     : null,
                 item.stockStatus || "Not Found",
+                item.url || "n/a",
                 brandName
             ];
             await client.query(queryText, values);

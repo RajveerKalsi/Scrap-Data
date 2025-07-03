@@ -157,8 +157,8 @@ async function saveResultsToPostgres(batchResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."BnHTracker" ("trackingDate", "parentSku", "marketplaceSku", "productTitle", "price", "inStock", "usedPrice", "brandName")
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO "Records"."BnHTracker" ("trackingDate", "parentSku", "marketplaceSku", "productTitle", "price", "inStock", "usedPrice", "url", "brandName")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `;
 
         const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
@@ -181,6 +181,7 @@ async function saveResultsToPostgres(batchResults) {
                 price,
                 item.stockStatus || "Not Found",
                 usedPrice,
+                item.url || "n/a",
                 brandName
             ];
             await client.query(queryText, values);

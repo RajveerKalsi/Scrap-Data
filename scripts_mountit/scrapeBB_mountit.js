@@ -95,6 +95,7 @@ async function fetchAllProductsData(productList) {
       title: productData.title,
       price: productData.price,
       stock: productData.stock,
+      url: url,
     });
 
     if (results.length >= 10 || i === productList.length - 1) {
@@ -155,8 +156,8 @@ async function saveResultsToPostgres(results) {
   try {
     await client.connect();
     const queryText = `
-            INSERT INTO "Records"."BBTracker" ("trackingDate", "parentSku", "marketplaceSku", "itemId", "productTitle", "price", "inStock", "brandName")
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            INSERT INTO "Records"."BBTracker" ("trackingDate", "parentSku", "marketplaceSku", "itemId", "productTitle", "price", "inStock", "url", "brandName")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `;
 
     const today = new Date().toLocaleString("en-US", {
@@ -178,6 +179,7 @@ async function saveResultsToPostgres(results) {
         item.title || "Not Found",
         price,
         item.stock || "Not Found",
+        item.url || "n/a",
         brandName,
       ];
       await client.query(queryText, values);

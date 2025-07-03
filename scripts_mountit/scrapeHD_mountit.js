@@ -59,7 +59,7 @@ async function fetchProductData(url, itemId, parentSKU, marketplaceSKU) {
         const productTitle = await fetchTitle($);
         const price = await fetchPrice($);
         const stockStatus = await fetchStock($);
-        return { itemId, parentSKU, marketplaceSKU, productTitle, price, stockStatus, html: $.html() };
+        return { itemId, parentSKU, marketplaceSKU, productTitle, price, stockStatus, url, html: $.html() };
     }
     return null;
 }
@@ -71,7 +71,7 @@ async function fetchAllProductsData(data, retries = 50) {
     const missingUrlIds = [];
     let missingUrlCount = 0;
 
-    const limit = process.env.NODE_ENV === 'DEV' ? 2 : data.length;
+    const limit = process.env.NODE_ENV === 'DEV' ? 10 : data.length;
     const batchSize = 10;
     const totalBatches = Math.ceil(limit / batchSize);
 
@@ -92,7 +92,8 @@ async function fetchAllProductsData(data, retries = 50) {
                     marketplaceSKU: item.marketplaceSKU,
                     productTitle: "n/a",
                     price: "n/a",
-                    stockStatus: "n/a"
+                    stockStatus: "n/a",
+                    url: "n/a"  
                 };
             }
 
@@ -113,7 +114,8 @@ async function fetchAllProductsData(data, retries = 50) {
                 marketplaceSKU: item.marketplaceSKU,
                 productTitle: "Not Found",
                 price: "Not Found",
-                stockStatus: "Not Found"
+                stockStatus: "Not Found",
+                url: item.url
             };
         }));
 
@@ -181,8 +183,8 @@ async function saveResultsToPostgres(batchResults) {
     try {
         await client.connect();
         const queryText = `
-            INSERT INTO "Records"."HomeDepotTracker" ("trackingDate", "itemId", "marketplaceSku", "productTitle", "price", "inStock", "brandName")
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            INSERT INTO "Records"."HomeDepotTracker" ("trackingDate", "itemId", "parentSku", "marketplaceSku", "productTitle", "price", "inStock", "url", "brandName")
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         `;
 
         const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
@@ -192,10 +194,12 @@ async function saveResultsToPostgres(batchResults) {
             const values = [
                 today,
                 item.itemId || 'n/a',
+                item.parentSKU || null,
                 item.marketplaceSKU || null,
                 item.productTitle || "Not Found",
                 item.price === "n/a" ? null : parseFloat(item.price.replace(/[^0-9.-]+/g, "")),
                 item.stockStatus || "Not Found",
+                item.url || "n/a",
                 brandName
             ];
             await client.query(queryText, values);
