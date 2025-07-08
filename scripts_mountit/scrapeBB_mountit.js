@@ -17,27 +17,22 @@ async function readUrlsFromFile(filePath) {
     .filter((product) => product.itemId);
 }
 
-async function fetchProductData(url, retries = 10) {
+async function fetchProductData(url, page, retries = 10) {
   let attempt = 0;
   while (attempt < retries) {
     try {
-      const browser = await puppeteer.launch({
-        headless: false,
-        args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      });
-      const page = await browser.newPage();
       await page.setUserAgent(
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36"
       );
       await page.setViewport({ width: 1280, height: 800 });
-      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+      await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
 
       await page.waitForSelector("#large-customer-price", { timeout: 15000 });
 
       const data = await page.evaluate(() => {
         const noResultsBlock = document
           .querySelector(".no-results-found-block h3")
-          ?.innerText.includes("we didn’t find anything");
+          ?.innerText.includes("we didn't find anything");
         const discontinuedMessage = [
           ...document.querySelectorAll("div.text-danger"),
         ].some((el) =>
@@ -63,13 +58,10 @@ async function fetchProductData(url, retries = 10) {
           stock: outOfStock ? "False" : "True",
         };
       });
-
-      await browser.close();
+      
       return data;
     } catch (error) {
-      console.error(
-        `Attempt ${attempt + 1} failed for ${url}: ${error.message}`
-      );
+      console.error(`Attempt ${attempt + 1} failed for ${url}: ${error.message}`);
       attempt++;
       if (attempt >= retries) {
         console.error(`Giving up on ${url} after ${retries} attempts.`);
@@ -82,12 +74,18 @@ async function fetchProductData(url, retries = 10) {
 
 async function fetchAllProductsData(productList) {
   let results = [];
+   const browser = await puppeteer.launch({
+    headless: false,
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+  const page = await browser.newPage();
+
   for (let i = 0; i < productList.length; i++) {
     const product = productList[i];
     const url = `https://www.bestbuy.com/product/${product.itemId}`;
     console.log(`Fetching data for: ${url}`);
 
-    const productData = await fetchProductData(url);
+    const productData = await fetchProductData(url, page);
     results.push({
       parentSKU: product.parentSKU,
       marketplaceSKU: product.marketplaceSKU,
@@ -105,6 +103,7 @@ async function fetchAllProductsData(productList) {
       results = [];
     }
   }
+  await browser.close();
 }
 async function saveResultsToCSV(data, filePath) {
   const today = new Date()
