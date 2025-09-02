@@ -27,7 +27,7 @@ async function fetchProductData(url, page, retries = 10) {
       await page.setViewport({ width: 1280, height: 800 });
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
 
-      await page.waitForSelector("#large-customer-price", { timeout: 15000 });
+      await page.waitForSelector('[data-testid="price-block-customer-price"]', { timeout: 15000 });
 
       const data = await page.evaluate(() => {
         const noResultsBlock = document
@@ -49,7 +49,7 @@ async function fetchProductData(url, page, retries = 10) {
         const title =
           document.querySelector("h1.h4")?.innerText.trim() || "Not Found";
         const price =
-          document.querySelector("#large-customer-price")?.innerText.trim() ||
+          document.querySelector('[data-testid="price-block-customer-price"]')?.innerText.trim() ||
           "Not Found";
 
         return {
@@ -82,7 +82,7 @@ async function fetchAllProductsData(productList) {
 
   for (let i = 0; i < productList.length; i++) {
     const product = productList[i];
-    const url = `https://www.bestbuy.com/product/${product.itemId}`;
+    const url = `https://www.bestbuy.com/product/sku/${product.itemId}`;
     console.log(`Fetching data for: ${url}`);
 
     const productData = await fetchProductData(url, page);
@@ -98,8 +98,8 @@ async function fetchAllProductsData(productList) {
 
     if (results.length >= 10 || i === productList.length - 1) {
       console.log("Saving batch to database...");
-      await saveResultsToPostgres(results);
-      //   await saveResultsToCSV(results, "test_scraped_data_bestbuy_mountit.csv");
+      // await saveResultsToPostgres(results);
+        await saveResultsToCSV(results, "test_scraped_data_bestbuy_mountit.csv");
       results = [];
     }
   }
