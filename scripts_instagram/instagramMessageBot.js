@@ -2,7 +2,7 @@
 const puppeteer = require("puppeteer");
 const Papa = require("papaparse");
 const fs = require("fs");
-const { sleep, loginInstagram, loadCredentialsFromEnv } = require("./common");
+const { sleep, loginInstagram, loadCredentialsFromEnv, typeMultilineMessage } = require("./common");
 require("dotenv").config();
 
 // Load profiles to message
@@ -108,7 +108,7 @@ Warmly,
 ${contactName}`;
 
   // Type & send
-  await page.type(textboxSelector, message, { delay: 20 });
+  await typeMultilineMessage(page, textboxSelector, message);
 
   // Try Enter-to-send
   await page.keyboard.press("Enter");

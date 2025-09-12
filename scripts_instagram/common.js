@@ -57,6 +57,19 @@ function loadCredentialsFromEnv() {
   return { username, password };
 }
 
+async function typeMultilineMessage(page, selector, message) {
+  const lines = message.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    await page.type(selector, lines[i], { delay: 20 });
+    if (i !== lines.length - 1) {
+      await page.keyboard.down("Shift");
+      await page.keyboard.press("Enter");
+      await page.keyboard.up("Shift");
+    }
+  }
+}
+
+
 
 module.exports = {
   sleep,
@@ -64,4 +77,5 @@ module.exports = {
   saveToCSV,
   loadKeywordsFromCSV,
   loadCredentialsFromEnv,
+  typeMultilineMessage,
 };
