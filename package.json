@@ -11,6 +11,7 @@
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
     "node-schedule": "^2.1.1",
+    "openai": "^5.20.1",
     "papaparse": "^5.4.1",
     "pg": "^8.13.1",
     "puppeteer": "^23.11.1",
