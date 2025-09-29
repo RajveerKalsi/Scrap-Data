@@ -2,7 +2,7 @@
 const puppeteer = require("puppeteer");
 const Papa = require("papaparse");
 const fs = require("fs");
-const { sleep, loginInstagram, loadCredentialsFromEnv, typeMultilineMessage } = require("./common");
+const { sleep, loginInstagramWithVerification, loadCredentialsFromEnv, typeMultilineMessage } = require("./common");
 require("dotenv").config();
 
 // Load profiles to message
@@ -144,7 +144,7 @@ ${contactName}`;
   const page = await browser.newPage();
 
   // Login
-  await loginInstagram(page, username, password);
+  await loginInstagramWithVerification(page, username, password);
 
   for (const p of profiles) {
     try {

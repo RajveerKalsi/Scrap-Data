@@ -15,6 +15,23 @@ function loadProfileUrls(file = "instagram_post_details.csv") {
   return parsed.data.map((row) => row.profileUrl).filter(Boolean);
 }
 
+async function safeGoto(page, url) {
+  try {
+    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 60000 });
+    // Instagram headers are always present
+    await page.waitForSelector("header", { timeout: 60000 });
+  } catch (err) {
+    console.warn(`⚠️ Navigation failed for ${url}:`, err.message);
+    throw err;
+  }
+}
+
+function extractEmailFromBio(bio) {
+  if (!bio) return "";
+  const match = bio.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0] : "";
+}
+
 // Country detection from bio text (simple heuristic)
 async function detectCountryLLM(bio) {
   if (!bio) return "unknown";
@@ -72,9 +89,8 @@ async function detectIsShop(bio) {
   return await detectIsShopLLM(bio);
 }
 
-
 async function scrapeProfile(page, profileUrl) {
-  await page.goto(profileUrl, { waitUntil: "networkidle2" });
+  await safeGoto(page, profileUrl);
   await sleep(2000);
 
   return await page.evaluate(() => {
@@ -94,7 +110,9 @@ async function scrapeProfile(page, profileUrl) {
 
     // Posts (Instagram sometimes hides "posts" text, so grab the first li/span with a number)
     let posts = "";
-    const counters = document.querySelectorAll("header li span, header ul li span");
+    const counters = document.querySelectorAll(
+      "header li span, header ul li span"
+    );
     if (counters.length >= 1) {
       posts = counters[0].innerText.trim();
     }
@@ -110,7 +128,6 @@ async function scrapeProfile(page, profileUrl) {
   });
 }
 
-
 (async () => {
   const { username, password } = loadCredentialsFromEnv();
   const profileUrls = loadProfileUrls();
@@ -118,8 +135,17 @@ async function scrapeProfile(page, profileUrl) {
   const browser = await puppeteer.launch({
     headless: false, // change to true when stable
     defaultViewport: null,
+    protocolTimeout: 180000,
+    args: [
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--no-sandbox",
+    ],
   });
   const page = await browser.newPage();
+  page.setDefaultNavigationTimeout(120000);
+  page.setDefaultTimeout(60000);
 
   // Login
   await loginInstagram(page, username, password);
@@ -132,7 +158,8 @@ async function scrapeProfile(page, profileUrl) {
       const data = await scrapeProfile(page, url);
       data.profileUrl = url;
       data.country = await detectCountry(data.bio);
-      data.isShop = await detectIsShop(data.bio); 
+      data.isShop = await detectIsShop(data.bio);
+      data.email = extractEmailFromBio(data.bio);
       results.push(data);
 
       // Save progress every 10 scrapes

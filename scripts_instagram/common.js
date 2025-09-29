@@ -36,6 +36,40 @@ async function loginInstagram(page, username, password) {
   }
 }
 
+async function loginInstagramWithVerification(page, username, password) {
+  await page.goto("https://www.instagram.com/accounts/login/", {
+    waitUntil: "domcontentloaded", // safer than networkidle2
+    timeout: 60000,
+  });
+
+  await page.waitForSelector("input[name='username']", { timeout: 20000 });
+  await page.type("input[name='username']", username, { delay: 120 });
+  await page.type("input[name='password']", password, { delay: 120 });
+
+  await Promise.all([
+    page.click("button[type='submit']"),
+    page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 60000 }).catch(() => {}),
+  ]);
+
+  console.log("⏳ Waiting for possible verification code input... (you have ~60s to type it)");
+  try {
+    await page.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 60000 });
+  } catch {
+    console.warn("⚠️ No navigation detected after 60s — continuing anyway.");
+  }
+
+  try {
+    const [saveBtn] = await page.$x("//button[contains(., 'Save') or contains(., 'Not Now')]");
+    if (saveBtn) {
+      await saveBtn.click();
+      await sleep(1200);
+    }
+  } catch (err) {
+    console.warn("⚠️ Could not handle 'Save Login Info' prompt:", err);
+  }
+}
+
+
 function saveToCSV(data, filename = "instagram_posts.csv") {
   const csv = Papa.unparse(data);
   fs.writeFileSync(filename, csv, "utf8");
@@ -74,6 +108,7 @@ async function typeMultilineMessage(page, selector, message) {
 module.exports = {
   sleep,
   loginInstagram,
+  loginInstagramWithVerification,
   saveToCSV,
   loadKeywordsFromCSV,
   loadCredentialsFromEnv,

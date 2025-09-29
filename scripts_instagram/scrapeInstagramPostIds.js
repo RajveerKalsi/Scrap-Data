@@ -8,7 +8,7 @@ const {
   loadCredentialsFromEnv,
 } = require("./common");
 
-const MAX_POSTS_DEFAULT = 30;
+const MAX_POSTS_DEFAULT = 500;
 
 async function launchBrowser() {
   return puppeteer.launch({

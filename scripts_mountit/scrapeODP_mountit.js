@@ -22,6 +22,7 @@ async function readUrlsFromFile(filePath) {
 async function scrapeBatchWithPuppeteer(batch) {
     const browser = await puppeteer.launch({ headless: false }); // or false for debugging
     const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 800 });
     const results = [];
 
     const today = new Date().toLocaleString('en-US', { timeZone: 'America/Los_Angeles' });
