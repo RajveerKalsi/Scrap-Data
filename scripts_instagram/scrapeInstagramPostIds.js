@@ -6,6 +6,7 @@ const {
   saveToCSV,
   loadKeywordsFromCSV,
   loadCredentialsFromEnv,
+  loginInstagramWithVerification,
 } = require("./common");
 
 const MAX_POSTS_DEFAULT = 500;
@@ -100,7 +101,7 @@ async function scrapeInstagramPosts(page, keyword, maxPosts) {
     );
     await page.setViewport({ width: 1280, height: 800 });
 
-    await loginInstagram(page, username, password);
+    await loginInstagramWithVerification(page, username, password);
 
     let allResults = [];
     for (const keyword of keywords) {

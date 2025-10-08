@@ -101,7 +101,7 @@ Hope you're doing great!
 
 I'm reaching out on behalf of ${brandName}, a brand passionate about promoting healthier, more sustainable gardens and farms. We create natural, eco-friendly plant nutrition solutions and we're proud to be a 1% for the Planet member, contributing a portion of our annual sales to environmental causes.
 
-We'd love to collaborate with creators who care about sustainability, gardening, home greenery, or clean living. If that sounds like you, we'd be happy to share more about how we can work together.
+We'd love to collaborate with creators who care about sustainability, gardening, home greenery, or clean living. If that sounds like you, please share your email address so we can send over more details about the collaboration.
 
 Looking forward to connecting!
 Warmly,
