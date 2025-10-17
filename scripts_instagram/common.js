@@ -82,6 +82,15 @@ function loadKeywordsFromCSV(filepath = "keywords.csv") {
   return parsed.data.map((row) => row.keywords).filter(Boolean);
 }
 
+function loadCredentialsFromEnvForMessage() {
+  const username = process.env.IG_USERNAME_FOR_MESSAGE;
+  const password = process.env.IG_PASSWORD_FOR_MESSAGE;
+  if (!username || !password) {
+    throw new Error("❌ IG_USERNAME or IG_PASSWORD not found in .env");
+  }
+  return { username, password };
+}
+
 function loadCredentialsFromEnv() {
   const username = process.env.IG_USERNAME;
   const password = process.env.IG_PASSWORD;
@@ -112,5 +121,6 @@ module.exports = {
   saveToCSV,
   loadKeywordsFromCSV,
   loadCredentialsFromEnv,
+  loadCredentialsFromEnvForMessage,
   typeMultilineMessage,
 };

@@ -1,15 +1,17 @@
-//scrapeInstagramPostIds.js
 const puppeteer = require("puppeteer");
 const {
   sleep,
-  loginInstagram,
-  saveToCSV,
-  loadKeywordsFromCSV,
   loadCredentialsFromEnv,
   loginInstagramWithVerification,
 } = require("./common");
+const {
+  addKeywordIfNotExists,
+  addPost,
+  getKeywordsByBrand,
+  closePool,
+} = require("./db.utils");
 
-const MAX_POSTS_DEFAULT = 190;
+const MAX_POSTS_DEFAULT = 1000;
 
 async function launchBrowser() {
   return puppeteer.launch({
@@ -29,24 +31,6 @@ async function openSearchPage(page, keyword) {
     .catch(() => console.warn(`⚠️ No posts initially for #${keyword}`));
 }
 
-async function extractPosts(page, seen, keyword) {
-  const newPosts = await page.$$eval("a[href^='/p/']", (anchors) =>
-    anchors.map((a) => a.getAttribute("href"))
-  );
-
-  const fresh = [];
-  for (const href of newPosts) {
-    if (!seen.has(href)) {
-      seen.add(href);
-      fresh.push({
-        keyword,
-        postUrl: `https://www.instagram.com${href}`,
-      });
-    }
-  }
-  return fresh;
-}
-
 async function scrollPage(page) {
   const steps = 3 + Math.floor(Math.random() * 4);
   for (let i = 0; i < steps; i++) {
@@ -62,55 +46,90 @@ async function scrollPage(page) {
   await sleep(1500 + Math.floor(Math.random() * 2000));
 }
 
-async function scrapeInstagramPosts(page, keyword, maxPosts) {
+async function scrapeInstagramPosts(page, brandId, brandName, keyword, maxPosts) {
   await openSearchPage(page, keyword);
-
   const seen = new Set();
-  const results = [];
+  let resultsCount = 0;
 
-  while (results.length < maxPosts) {
-    const fresh = await extractPosts(page, seen, keyword);
+  // Ensure keyword exists and get its ID
+  const keywordId = await addKeywordIfNotExists(brandName, keyword);
 
-    if (fresh.length > 0) {
-      results.push(...fresh);
-      console.log(`📸 [#${keyword}] +${fresh.length} new posts (total: ${results.length})`);
+  const postsToInsert = []; // <-- store posts temporarily
+
+  while (resultsCount < maxPosts) {
+    const newPosts = await page.$$eval("a[href^='/p/']", (anchors) =>
+      anchors.map((a) => a.getAttribute("href"))
+    );
+
+    let freshCount = 0;
+    for (const href of newPosts) {
+      if (!seen.has(href)) {
+        seen.add(href);
+        const fullUrl = `https://www.instagram.com${href}`;
+        postsToInsert.push(fullUrl); // <-- collect instead of inserting
+        freshCount++;
+        resultsCount++;
+      }
+    }
+
+    if (freshCount > 0) {
+      console.log(
+        `📸 [#${keyword}] +${freshCount} new posts (total: ${resultsCount})`
+      );
     } else {
       console.log(`⚠️ [#${keyword}] No fresh posts loaded.`);
       break;
     }
 
-    if (results.length < maxPosts) {
+    if (resultsCount < maxPosts) {
       await scrollPage(page);
     }
   }
 
-  console.log(`✅ Finished #${keyword}: ${results.length} posts`);
-  return results;
+  // Insert all posts at once
+  for (const postUrl of postsToInsert) {
+    await addPost(brandId, keywordId, postUrl);
+  }
+
+  console.log(`✅ Finished #${keyword}: ${resultsCount} posts (added in batch)`);
 }
 
 // Main runner
 (async () => {
   try {
     const { username, password } = loadCredentialsFromEnv();
-    const keywords = loadKeywordsFromCSV();
+
     const browser = await launchBrowser();
     const page = await browser.newPage();
-
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     );
     await page.setViewport({ width: 1280, height: 800 });
-
     await loginInstagramWithVerification(page, username, password);
 
-    let allResults = [];
-    for (const keyword of keywords) {
-      const posts = await scrapeInstagramPosts(page, keyword, MAX_POSTS_DEFAULT);
-      allResults = allResults.concat(posts);
+    const scrapePlan = {
+      biogrowth: [], // empty array means "all keywords for this brand"
+      mothercould: [],
+    };
+
+    for (const [brandName, keywordFilter] of Object.entries(scrapePlan)) {
+      // Fetch keywords from DB, optionally filtered
+      const keywordsFromDB = await getKeywordsByBrand(brandName, keywordFilter);
+
+      for (const { id: keywordId, brand_id, brand_name, keyword } of keywordsFromDB) {
+        await scrapeInstagramPosts(
+          page,
+          brand_id, // pass brand_id
+          brand_name,
+          keyword,
+          MAX_POSTS_DEFAULT
+        );
+      }
     }
 
-    saveToCSV(allResults);
     await browser.close();
+    await closePool();
+    console.log("✅ All done");
   } catch (err) {
     console.error("Error:", err);
   }
