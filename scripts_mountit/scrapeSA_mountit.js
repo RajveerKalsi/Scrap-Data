@@ -1,11 +1,7 @@
-const axios = require("axios");
+const puppeteer = require("puppeteer");
 const cheerio = require("cheerio");
 const fs = require("fs");
 const Papa = require("papaparse");
-const { Client } = require("pg");
-const cron = require("node-cron");
-const puppeteer = require("puppeteer");
-
 require("dotenv").config();
 
 async function readUrlsFromFile(filePath) {
@@ -19,41 +15,37 @@ async function readUrlsFromFile(filePath) {
   }));
 }
 
-async function loginAndGetCookies() {
-  const browser = await puppeteer.launch({ headless: false }); // set to false to see the browser
+async function loginAndGetPage() {
+  const browser = await puppeteer.launch({ headless: false });
   const page = await browser.newPage();
-  await page.setViewport({ width: 1280, height: 800 });
+  await page.setViewport({ width: 1280, height: 980 });
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  );
+  await page.setExtraHTTPHeaders({
+    "Accept-Language": "en-US,en;q=0.9",
+  });
 
   try {
+    console.log("🧭 Navigating to login page...");
     await page.goto("https://www.staplesadvantage.com/idm", {
       waitUntil: "networkidle2",
     });
 
-    // Wait for email input to show
-    await page.waitForSelector("input[name='userId']");
-    await page.type("input[name='userId']", "rajveer.parveet@gmail.com");
+    console.log("⚠️ Please complete login manually (including CAPTCHA).");
+    console.log("⏳ Waiting for login to finish...");
 
-    // Click "Next"
-    await page.waitForSelector("#Next");
-    await page.click("#Next");
+    // Wait until user is redirected (new page or dashboard)
+    await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 0 });
 
-    // Wait for password input
-    await page.waitForSelector("input[name='password']", { visible: true });
-    await page.type("input[name='password']", "rajveerRK@12");
+    // Check if still on login page
+    if (page.url().includes("idm")) {
+      console.log("⚠️ Still on login page — login might have failed.");
+      return null;
+    }
 
-    // Click "Sign in"
-    await page.waitForSelector("#Sign\\ in"); // Escape space in ID
-    await page.click("#Sign\\ in");
-
-    // Wait for login to complete (adjust if needed)
-    await page.waitForNavigation({ waitUntil: "networkidle2" });
-
-    // Extract cookies
-    const cookies = await page.cookies();
-    await browser.close();
-
-    console.log("✅ Logged in successfully.");
-    return cookies;
+    console.log("✅ Login successful, continuing to scraping...");
+    return { browser, page };
   } catch (err) {
     console.error("❌ Login failed:", err.message);
     await browser.close();
@@ -61,94 +53,18 @@ async function loginAndGetCookies() {
   }
 }
 
-async function fetchData(url, retries = 10) {
-  let attempt = 0;
-  while (attempt < retries) {
-    try {
-      const response = await axios.post(
-        "https://scraper-api.smartproxy.com/v2/scrape",
-        {
-          target: "universal",
-          url,
-          headless: "html",
-          geo: "United States",
-          locale: "en-us",
-          domain: "com",
-          device_type: "desktop_chrome",
-          force_headers: true,
-          force_cookies: true,
-        },
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Basic VTAwMDAxNDUyNjI6RTZvanNmMmV1OGh3VlI1RGpq`,
-          },
-        }
-      );
 
-      if (
-        response.data &&
-        response.data.results &&
-        response.data.results[0].content
-      ) {
-        return cheerio.load(response.data.results[0].content); // Load HTML into Cheerio
-      } else {
-        console.error("Invalid response format:", response.data);
-        return null;
-      }
-    } catch (error) {
-      if (error.response) {
-        console.error(
-          `Attempt ${
-            attempt + 1
-          } failed for ${url}: Request failed with status code ${
-            error.response.status
-          }`
-        );
-        if (error.response.status === 500) {
-          return null;
-        }
-      } else {
-        // Log non-HTTP errors (like network issues)
-        console.error(
-          `Attempt ${attempt + 1} failed for ${url}: ${error.message}`
-        );
-      }
-      attempt++;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-    }
-  }
-  return null;
-}
+async function fetchProductData(page, url, itemId, parentSKU, marketplaceSKU) {
+  try {
+    await page.goto(url, { waitUntil: "networkidle2" });
+    const html = await page.content();
+    const $ = cheerio.load(html);
 
-async function fetchTitle($) {
-  return $(".product-info-ux2dot0__product_title span").first().text().trim();
-}
-
-async function fetchPrice($) {
-  return $(".price-info__final_price_sku").text().trim();
-}
-
-async function fetchStock($) {
-  const outOfStockMessage = $(".purchasing-option-pickers__purchasing_option_text").length;
-  return outOfStockMessage > 0 ? "True" : "False";
-}
-
-async function fetchProductData(url, itemId, parentSKU, marketplaceSKU) {
-  const $ = await fetchData(url);
-  if ($) {
-    const productTitle = await fetchTitle($);
-    const priceText = await fetchPrice($);
+    const productTitle = $(".product-info-ux2dot0__product_title span").first().text().trim() || "Not Found";
+    const priceText = $(".price-info__final_price_sku").text().trim();
     const price = priceText || "Not Found";
-    const stockStatus =
-      !price ||
-      price === "Not Found" ||
-      isNaN(parseFloat(price.replace(/[^0-9.-]+/g, "")))
-        ? "False"
-        : await fetchStock($);
-
-    // Save the HTML content to a file
-    // await saveHtmlContentToFile($.html(), itemId);
+    const outOfStockMessage = $(".purchasing-option-pickers__purchasing_option_text").length;
+    const stockStatus = outOfStockMessage > 0 ? "True" : "False";
 
     return {
       itemId,
@@ -157,109 +73,19 @@ async function fetchProductData(url, itemId, parentSKU, marketplaceSKU) {
       productTitle,
       price,
       stockStatus,
-      html: $.html(),
-      url
+      url,
     };
-  }
-  return null;
-}
-
-async function saveHtmlContentToFile(content, itemId) {
-  const fileName = `product_${itemId}.html`;
-  const filePath = `./html_files/${fileName}`;
-
-  // Ensure the directory exists
-  if (!fs.existsSync("./html_files")) {
-    fs.mkdirSync("./html_files");
-  }
-
-  try {
-    fs.writeFileSync(filePath, content);
-    console.log(`HTML content for ItemId ${itemId} saved to ${filePath}`);
-  } catch (error) {
-    console.error("Error saving HTML content:", error);
-  }
-}
-
-async function fetchAllProductsData(data, retries = 50) {
-  let successfulFetchCount = 0;
-  let unsuccessfulFetchCount = 0;
-  let unsuccessfulIds = [];
-  const missingUrlIds = [];
-  let missingUrlCount = 0;
-
-  const limit = process.env.NODE_ENV === "DEV" ? 2 : data.length;
-  const batchSize = 10;
-  const totalBatches = Math.ceil(limit / batchSize);
-
-  // Processing data in batches of 10
-  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
-    const batchStart = batchIndex * batchSize;
-    const batchEnd = Math.min(batchStart + batchSize, limit);
-    const batch = data.slice(batchStart, batchEnd);
-
-    const batchResults = await Promise.all(
-      batch.map(async (item) => {
-        if (!item.itemId || item.itemId.toLowerCase() === "n/a") {
-          console.log(
-            `Invalid itemId for parentSKU: ${item.parentSKU}, marketplaceSKU: ${item.marketplaceSKU}`
-          );
-          missingUrlCount++;
-          missingUrlIds.push(item.itemId || "n/a");
-          return {
-            itemId: item.itemId || "n/a",
-            parentSKU: item.parentSKU,
-            marketplaceSKU: item.marketplaceSKU,
-            productTitle: "n/a",
-            price: "n/a",
-            stockStatus: "n/a",
-          };
-        }
-
-        // Construct the URL using itemId
-        item.url = `https://www.staplesadvantage.com/product_${item.itemId}`;
-
-        const productData = await fetchProductData(
-          item.url,
-          item.itemId,
-          item.parentSKU,
-          item.marketplaceSKU
-        );
-
-        if (productData && productData.productTitle !== "Not Found") {
-          successfulFetchCount++;
-        } else {
-          unsuccessfulFetchCount++;
-        }
-
-        return (
-          productData || {
-            itemId: item.itemId,
-            parentSKU: item.parentSKU,
-            marketplaceSKU: item.marketplaceSKU,
-            productTitle: "Not Found",
-            price: "Not Found",
-            stockStatus: "Not Found",
-            url: item.url || "n/a",
-          }
-        );
-      })
-    );
-
-    // const validResults = batchResults.filter((data) => data);
-
-    // Saving results to CSV and Postgres
-    await saveResultsToCSV(batchResults);
-    // await saveResultsToPostgres(batchResults);
-
-    // Logging batch details
-    console.log(`Batch ${batchIndex + 1} processed:`);
-    console.log(`Successful fetches: ${successfulFetchCount}`);
-    console.log(`Unsuccessful fetches: ${unsuccessfulFetchCount}`);
-    console.log(`Missing URL count: ${missingUrlCount}`);
-    if (unsuccessfulIds.length > 0) {
-      console.log(`Unsuccessful fetch IDs: ${unsuccessfulIds.join(", ")}`);
-    }
+  } catch (err) {
+    console.error(`❌ Failed to fetch ${url}:`, err.message);
+    return {
+      itemId,
+      parentSKU,
+      marketplaceSKU,
+      productTitle: "Not Found",
+      price: "Not Found",
+      stockStatus: "Not Found",
+      url,
+    };
   }
 }
 
@@ -289,10 +115,8 @@ async function saveResultsToCSV(allResults) {
   }));
 
   const csv = Papa.unparse(csvData);
-
   const filePath = "test_scraped_data_staples_mountit.csv";
 
-  // Append to the existing CSV if it exists; otherwise, create a new one
   if (fs.existsSync(filePath)) {
     fs.appendFileSync(filePath, "\n" + csv.split("\n").slice(1).join("\n"));
   } else {
@@ -300,70 +124,52 @@ async function saveResultsToCSV(allResults) {
   }
 }
 
-async function saveResultsToPostgres(batchResults) {
-  const client = new Client({
-    host: process.env.DB_HOST,
-    port: process.env.DB_PORT,
-    user: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-  });
+async function fetchAllProductsData(page, data) {
+  let successfulFetchCount = 0;
+  let unsuccessfulFetchCount = 0;
+  const limit = process.env.NODE_ENV === "DEV" ? 2 : data.length;
+  const batchSize = 5;
+  const totalBatches = Math.ceil(limit / batchSize);
 
-  try {
-    await client.connect();
-    const queryText = `
-            INSERT INTO "Records"."StaplesTracker" ("trackingDate", "itemId", "parentSku", "marketplaceSku", "productTitle", "price", "inStock", "url", "brandName")
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-        `;
+  for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+    const batchStart = batchIndex * batchSize;
+    const batchEnd = Math.min(batchStart + batchSize, limit);
+    const batch = data.slice(batchStart, batchEnd);
 
-    const today = new Date().toLocaleString("en-US", {
-      timeZone: "America/Los_Angeles",
-    });
-    const brandName = "Mountit";
+    console.log(`🚀 Processing batch ${batchIndex + 1}/${totalBatches}...`);
 
-    for (const item of batchResults) {
-      let numericPrice = parseFloat(item.price.replace(/[^0-9.-]+/g, ""));
-      if (isNaN(numericPrice)) {
-        item.stockStatus = "False";
-        numericPrice = null;
-      }
+    const batchResults = [];
+    for (const item of batch) {
+      if (!item.itemId || item.itemId.toLowerCase() === "n/a") continue;
+      const url = `https://www.staplesadvantage.com/product_${item.itemId}`;
+      const productData = await fetchProductData(page, url, item.itemId, item.parentSKU, item.marketplaceSKU);
+      batchResults.push(productData);
 
-      const values = [
-        today,
-        item.itemId || "n/a",
-        item.parentSKU || null,
-        item.marketplaceSKU || null,
-        item.productTitle || "Not Found",
-        numericPrice,
-        item.stockStatus || "Not Found",
-        item.url || "n/a",
-        brandName,
-      ];
-      await client.query(queryText, values);
+      if (productData.productTitle !== "Not Found") successfulFetchCount++;
+      else unsuccessfulFetchCount++;
     }
 
-    console.log("Data successfully inserted into PostgreSQL.");
-  } catch (error) {
-    console.error("Failed to insert data into PostgreSQL:", error.message);
-  } finally {
-    await client.end();
+    await saveResultsToCSV(batchResults);
+    console.log(`✅ Batch ${batchIndex + 1} done - Success: ${successfulFetchCount}, Fail: ${unsuccessfulFetchCount}`);
   }
 }
 
 async function main() {
-    loginAndGetCookies();
-  const filePath = "../csvs_mountit/staplesSKUNew.csv";
+  const loginSession = await loginAndGetPage();
+  if (!loginSession) return;
+  const { browser, page } = loginSession;
 
+  const filePath = "../csvs_mountit/staplesSKUNew.csv";
   const data = await readUrlsFromFile(filePath);
 
   if (data.length > 0) {
-    data.forEach((item) => {
-      console.log(`ItemId: ${item.itemId} - PDP Link: ${item.url}`);
-    });
-    await fetchAllProductsData(data);
+    await fetchAllProductsData(page, data);
   } else {
     console.log("No data found in file.");
   }
+
+  await browser.close();
+  console.log("🎯 Scraping complete, browser closed.");
 }
 
 main();

@@ -14,7 +14,7 @@
     "openai": "^5.20.1",
     "papaparse": "^5.4.1",
     "pg": "^8.13.1",
-    "puppeteer": "^23.11.1",
+    "puppeteer": "^24.23.0",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
     "xlsx": "^0.18.5"

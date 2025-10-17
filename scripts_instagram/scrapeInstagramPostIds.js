@@ -9,7 +9,7 @@ const {
   loginInstagramWithVerification,
 } = require("./common");
 
-const MAX_POSTS_DEFAULT = 500;
+const MAX_POSTS_DEFAULT = 190;
 
 async function launchBrowser() {
   return puppeteer.launch({
