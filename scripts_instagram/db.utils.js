@@ -179,6 +179,62 @@ async function addPostDetails(post) {
   }
 }
 
+// Get all profile URLs from posts table
+async function getProfileUrlsFromDB() {
+    const client = await pool.connect();
+    try {
+        const res = await client.query(
+            `SELECT id AS post_id, brand_id, keyword_id, profile_url FROM scrapper.instagram_post_details WHERE profile_url IS NOT NULL`
+        );
+        return res.rows;
+    } finally {
+        client.release();
+    }
+}
+
+// Get already scraped profile URLs
+async function getScrapedProfileUrls() {
+    const client = await pool.connect();
+    try {
+        const res = await client.query(`SELECT profile_url FROM scrapper.instagram_profiles`);
+        return new Set(res.rows.map(r => r.profile_url));
+    } finally {
+        client.release();
+    }
+}
+
+// Add profile details
+async function addProfileDetails(profile) {
+    const {
+        brand_id,
+        keyword_id,
+        post_id,
+        profile_url,
+        username,
+        posts,
+        followers,
+        following,
+        bio,
+        email,
+        country,
+        is_shop
+    } = profile;
+
+    const client = await pool.connect();
+    try {
+        await client.query(
+            `INSERT INTO scrapper.instagram_profiles
+            (brand_id, keyword_id, post_id, profile_url, username, posts, followers, following, bio, email, country, is_shop)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            ON CONFLICT (profile_url) DO NOTHING`,
+            [brand_id, keyword_id, post_id, profile_url, username, posts, followers, following, bio, email, country, is_shop]
+        );
+    } finally {
+        client.release();
+    }
+}
+
+
 async function closePool() {
   await pool.end();
 }
@@ -192,5 +248,8 @@ module.exports = {
   addPostDetails,
   getScrapedUrls,
   getPostUrlsByKeyword,
+  getProfileUrlsFromDB,
+  getScrapedProfileUrls,
+  addProfileDetails,
   closePool,
 };
