@@ -227,6 +227,7 @@ async function addProfileDetails(profile) {
         followers,
         following,
         bio,
+        connect_link,
         email,
         country,
         is_shop
@@ -236,16 +237,15 @@ async function addProfileDetails(profile) {
     try {
         await client.query(
             `INSERT INTO scrapper.instagram_profiles
-            (brand_id, keyword_id, post_id, profile_url, username, posts, followers, following, bio, email, country, is_shop)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+            (brand_id, keyword_id, post_id, profile_url, username, posts, followers, following, bio, connect_link, email, country, is_shop)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
             ON CONFLICT (profile_url) DO NOTHING`,
-            [brand_id, keyword_id, post_id, profile_url, username, posts, followers, following, bio, email, country, is_shop]
+            [brand_id, keyword_id, post_id, profile_url, username, posts, followers, following, bio, connect_link, email, country, is_shop]
         );
     } finally {
         client.release();
     }
 }
-
 
 async function closePool() {
   await pool.end();
