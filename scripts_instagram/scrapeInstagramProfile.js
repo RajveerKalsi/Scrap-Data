@@ -125,6 +125,11 @@ async function scrapeProfile(page, profileUrl) {
   let consecutiveEmpty = 0;
 
   for (const { profile_url, brand_id, keyword_id, post_id } of profiles) {
+    if (!profile_url || profile_url.trim() === "") {
+      console.warn("⚠️ Skipping empty or null profile_url");
+      continue;
+    }
+
     if (scrapedProfiles.has(profile_url)) {
       console.log(`⏩ Skipping already scraped: ${profile_url}`);
       continue;
