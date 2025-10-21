@@ -7,6 +7,7 @@ const {
 const {
   getAllKeywords,
   getPostUrlsByKeyword,
+  getPostsWithNullUsernames,
   getScrapedUrls,
   addPostDetails,
   closePool,
@@ -82,11 +83,6 @@ async function scrapePost(page, post) {
 
 async function scrapePostsFromDB(username, password) {
   console.log("🚀 Starting Instagram scraper...");
-  const allKeywords = await getAllKeywords();
-  console.log(`📚 Loaded ${allKeywords.length} keywords from DB.`);
-
-  const scrapedUrls = await getScrapedUrls();
-  console.log(`🧩 Found ${scrapedUrls.size} already-scraped post URLs.`);
 
   const browser = await puppeteer.launch({
     headless: false,
@@ -102,6 +98,36 @@ async function scrapePostsFromDB(username, password) {
   console.log("🔐 Logging into Instagram...");
   await loginInstagramWithVerification(page, username, password);
   console.log("✅ Login successful!");
+
+  // STEP 1️⃣ Retry posts with NULL usernames
+  const incompletePosts = await getPostsWithNullUsernames(500);
+  if (incompletePosts.length > 0) {
+    console.log(`🩹 Retrying ${incompletePosts.length} posts with missing usernames...`);
+
+    for (const { post_url, keyword_id, brand_id } of incompletePosts) {
+      try {
+        const postData = await scrapePost(page, { url: post_url, keyword: "retry" });
+
+        await addPostDetails({
+          ...postData,
+          brand_id,
+          keyword_id,
+        });
+        console.log(`✅ Fixed missing username for: ${post_url}`);
+        await sleep(MIN_DELAY + Math.random() * (MAX_DELAY - MIN_DELAY));
+      } catch (err) {
+        console.warn(`⚠️ Retry failed for ${post_url}: ${err.message}`);
+      }
+    }
+
+    console.log("🧹 Completed retry for missing usernames.\n");
+  } else {
+    console.log("✅ No incomplete posts found.");
+  }
+
+  // STEP 2️⃣ Proceed with normal scraping
+  const allKeywords = await getAllKeywords();
+  const scrapedUrls = await getScrapedUrls();
 
   let processedCount = 0;
   let consecutiveEmpty = 0;

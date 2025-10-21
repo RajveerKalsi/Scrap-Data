@@ -139,6 +139,18 @@ async function getPostUrlsByKeyword(keywordId) {
   }
 }
 
+async function getPostsWithNullUsernames(limit = 1000) {
+  const result = await client.query(
+    `SELECT id, post_url, keyword_id, brand_id
+     FROM scrapper.instagram_post_details
+     WHERE username IS NULL
+     ORDER BY created_at ASC
+     LIMIT $1`,
+    [limit]
+  );
+  return result.rows;
+}
+
 // Add post details if not exists
 async function addPostDetails(post) {
   const {
@@ -248,6 +260,7 @@ module.exports = {
   addPostDetails,
   getScrapedUrls,
   getPostUrlsByKeyword,
+  getPostsWithNullUsernames,
   getProfileUrlsFromDB,
   getScrapedProfileUrls,
   addProfileDetails,
