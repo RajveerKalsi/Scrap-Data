@@ -247,6 +247,35 @@ async function addProfileDetails(profile) {
     }
 }
 
+async function getProfilesToMessage() {
+  const client = await pool.connect();
+  try {
+    const res = await client.query(
+      `SELECT id, username, profile_url, brand_name, contact_name, region, sent_message
+       FROM scrapper.instagram_messages
+       WHERE sent_message = FALSE
+       ORDER BY created_at ASC`,
+    );
+    return res.rows;
+  } finally {
+    client.release();
+  }
+}
+
+async function markMessageSent(id) {
+  const client = await pool.connect();
+  try {
+    await client.query(
+      `UPDATE scrapper.instagram_messages
+       SET sent_message = TRUE
+       WHERE id = $1`,
+      [id]
+    );
+  } finally {
+    client.release();
+  }
+}
+
 async function closePool() {
   await pool.end();
 }
@@ -264,5 +293,7 @@ module.exports = {
   getProfileUrlsFromDB,
   getScrapedProfileUrls,
   addProfileDetails,
+  getProfilesToMessage,
+  markMessageSent,
   closePool,
 };
