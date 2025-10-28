@@ -4,8 +4,8 @@
 // require("dotenv").config();
 
 // const TRACKERS = [
+  //   { table: "BBTracker", columns: ['"trackingDate"', '"parentSku"', '"marketplaceSku"', '"itemId"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
 //   { table: "OfficeDepotTracker", columns: ['"trackingDate"', '"itemId"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-//   { table: "BBTracker", columns: ['"trackingDate"', '"parentSku"', '"marketplaceSku"', '"itemId"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
 //   { table: "BnHTracker", columns: ['"trackingDate"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"usedPrice"', '"url"'] },
 //   { table: "HomeDepotTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
 //   { table: "NewEggTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },

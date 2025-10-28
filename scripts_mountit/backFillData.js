@@ -3,7 +3,7 @@ require("dotenv").config();
 
 const TRACKERS = [
   "OfficeDepotTracker",
-//   "BBTracker",
+  "BBTracker",
   "BnHTracker",
   "HomeDepotTracker",
   "NewEggTracker",
@@ -75,29 +75,12 @@ async function bulkCopy(sourceDate, targetDates) {
 
 // Example usage
 (async () => {
-  const sourceDate = "2025-09-22"; // the date to copy from
+  const sourceDate = "2025-10-24"; // the date to copy from
   const targetDates = [
-    "2025-09-01",
-    "2025-09-02",
-    "2025-09-03",
-    "2025-09-04",
-    "2025-09-05",
-    "2025-09-06",
-    "2025-09-07",
-    "2025-09-08",
-    "2025-09-09",
-    "2025-09-10",
-    "2025-09-11",
-    "2025-09-12",
-    "2025-09-13",
-    "2025-09-14",
-    "2025-09-15",
-    "2025-09-16",
-    "2025-09-17",
-    "2025-09-18",
-    "2025-09-19",
-    "2025-09-20",
-    "2025-09-21",
+    "2025-10-23",
+    "2025-10-25",
+    "2025-10-26",
+    "2025-10-27",
   ];// the dates to copy into
 
   await bulkCopy(sourceDate, targetDates);

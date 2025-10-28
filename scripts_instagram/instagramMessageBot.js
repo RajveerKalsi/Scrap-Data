@@ -1,6 +1,15 @@
 const puppeteer = require("puppeteer");
-const { sleep, loginInstagramWithVerification, typeMultilineMessage, loadCredentialsFromEnvForMessage } = require("./common");
-const { getProfilesToMessage, markMessageSent, closePool } = require("./db.utils");
+const {
+  sleep,
+  loginInstagramWithVerification,
+  typeMultilineMessage,
+  loadCredentialsFromEnvForMessage,
+} = require("./common");
+const {
+  getProfilesToMessage,
+  markMessageSent,
+  closePool,
+} = require("./db.utils");
 
 async function sendMessage(page, profile) {
   const { id, profile_url, username, brand_name, contact_name, region } = profile;
@@ -9,15 +18,18 @@ async function sendMessage(page, profile) {
   await page.goto(profile_url, { waitUntil: "networkidle2" });
   await sleep(3000);
 
-  // --- Message button handling (same as before) ---
+  // --- Message button handling ---
   let messageBoxReady = false;
 
   try {
     const messageBtn = await page.evaluateHandle(() =>
       Array.from(document.querySelectorAll('div[role="button"]'))
-           .find(el => el.innerText.trim() === "Message")
+        .find(el => el.innerText.trim() === "Message")
     );
-    if (messageBtn) { await messageBtn.click(); messageBoxReady = true; }
+    if (messageBtn) {
+      await messageBtn.click();
+      messageBoxReady = true;
+    }
   } catch {}
 
   if (!messageBoxReady) {
@@ -27,14 +39,17 @@ async function sendMessage(page, profile) {
         const svg = document.querySelector('svg[aria-label="Options"]');
         return svg ? svg.closest('div[role="button"]') : null;
       });
-      if (optionsBtn) { 
-        await optionsBtn.click(); 
+      if (optionsBtn) {
+        await optionsBtn.click();
         await sleep(1000);
         const sendMsgBtn = await page.evaluateHandle(() =>
           Array.from(document.querySelectorAll('div[role="dialog"] button'))
-               .find(btn => btn.innerText.trim().toLowerCase() === "send message")
+            .find(btn => btn.innerText.trim().toLowerCase() === "send message")
         );
-        if (sendMsgBtn) { await sendMsgBtn.click(); messageBoxReady = true; }
+        if (sendMsgBtn) {
+          await sendMsgBtn.click();
+          messageBoxReady = true;
+        }
       }
     } catch {}
   }
@@ -65,13 +80,13 @@ ${contact_name}`;
 Hope you're doing great!
 
 I'm reaching out on behalf of ${brand_name}, a brand passionate about promoting healthier, more sustainable gardens and farms. We create natural, eco-friendly plant nutrition solutions and are proud to be a 1% for the Planet member, contributing a portion of our annual sales to environmental causes.
+
 We'd love to collaborate with creators who care about sustainability, gardening, home greenery, or clean living. If you're based in the USA and interested in this opportunity, please share your email address so we can send over more details about the collaboration.
 
 Looking forward to connecting!
 Warmly,
 ${contact_name}`;
   } else {
-    // default/fallback message if other region
     message = `Hi ${username},
 Hope you're doing great!
 
@@ -88,7 +103,9 @@ ${contact_name}`;
 
   // Click Send button fallback
   try {
-    const [sendBtn] = await page.$x('//div[@role="button" and normalize-space(text())="Send"]');
+    const [sendBtn] = await page.$x(
+      '//div[@role="button" and normalize-space(text())="Send"]'
+    );
     if (sendBtn) await sendBtn.click();
   } catch {}
 
@@ -98,7 +115,7 @@ ${contact_name}`;
 
 (async () => {
   const { username, password } = loadCredentialsFromEnvForMessage();
-  const profiles = await getProfilesToMessage(); // batch limit
+  const profiles = await getProfilesToMessage();
 
   if (!profiles.length) {
     console.log("✅ No profiles to message.");
@@ -106,20 +123,37 @@ ${contact_name}`;
     return;
   }
 
-  const browser = await puppeteer.launch({ headless: false, defaultViewport: null });
+  const browser = await puppeteer.launch({
+    headless: false,
+    defaultViewport: null,
+  });
   const page = await browser.newPage();
   await loginInstagramWithVerification(page, username, password);
 
+  let sentCount = 0;
+  const MAX_MESSAGES = 100;
+
   for (const p of profiles) {
+    if (sentCount >= MAX_MESSAGES) {
+      console.log(`🚫 Reached message limit of ${MAX_MESSAGES}. Stopping script.`);
+      break;
+    }
+
     try {
       const sent = await sendMessage(page, p);
-      if (sent) await markMessageSent(p.id);
+      if (sent) {
+        await markMessageSent(p.id);
+        sentCount++;
+      }
     } catch (err) {
       console.error(`❌ Failed for ${p.username}:`, err.message);
     }
+
+    console.log(`📊 Progress: ${sentCount}/${MAX_MESSAGES} messages sent.`);
     await sleep(5000 + Math.random() * 5000);
   }
 
+  console.log(`🎉 Script finished. Total messages sent: ${sentCount}`);
   await browser.close();
   await closePool();
 })();
