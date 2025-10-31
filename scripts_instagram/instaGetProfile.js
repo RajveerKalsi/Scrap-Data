@@ -6,7 +6,7 @@ const { loginInstagramWithVerification, loadCredentialsFromEnv, sleep } = requir
 (async () => {
   const { username, password } = loadCredentialsFromEnv();
   const keyword = "parentalhack";
-  const OUTPUT_FILE = path.join(__dirname, "usernames.csv");
+  const OUTPUT_FILE = path.join(__dirname, "hashtag_posts.csv");
 
   const browser = await puppeteer.launch({
     headless: false,
@@ -19,38 +19,39 @@ const { loginInstagramWithVerification, loadCredentialsFromEnv, sleep } = requir
   console.log("🔐 Logging into Instagram...");
   await loginInstagramWithVerification(page, username, password);
 
-  // 2️⃣ Navigate to keyword search
-  const searchUrl = `https://www.instagram.com/explore/search/keyword/?q=${keyword}`;
+  // 2️⃣ Go to hashtag explore page
+  const searchUrl = `https://www.instagram.com/explore/tags/${keyword}/`;
   console.log(`🔎 Navigating to ${searchUrl}`);
   await page.goto(searchUrl, { waitUntil: "networkidle2" });
 
-  // 3️⃣ Click the first post
+  // Wait for posts to load
   await page.waitForSelector('a[href^="/p/"], a[href^="/reel/"]', { timeout: 20000 });
-  console.log("📸 Clicking the first post...");
+  console.log("📸 Posts loaded...");
+
+  // Click first post
   await page.evaluate(() => {
-    const firstCard = document.querySelector('a[href^="/p/"], a[href^="/reel/"]');
-    if (firstCard) firstCard.click();
+    const firstPost = document.querySelector('a[href^="/p/"], a[href^="/reel/"]');
+    if (firstPost) firstPost.click();
   });
 
-  // Wait for dialog to appear
-  await page.waitForSelector('article, div[role="dialog"]', { timeout: 15000 });
-  console.log("📄 Post dialog opened!");
+  await page.waitForSelector('div[role="dialog"]', { timeout: 15000 });
+  console.log("📄 First post dialog opened!");
 
-  const usernames = new Set();
+  const scrapedData = [];
 
-  // 4️⃣–6️⃣ Loop through 10 posts
+  // 3️⃣ Loop through N posts
   for (let i = 0; i < 10; i++) {
     try {
-      // Wait for username span to appear
-      await page.waitForSelector('div[role="dialog"] span', { timeout: 10000 });
+      console.log(`\n🧩 Scraping post ${i + 1}...`);
+      await page.waitForSelector('div[role="dialog"]', { timeout: 10000 });
 
-      // Extract username from the dialog
+      // Use your robust username extraction method here:
       const user = await page.evaluate(() => {
         const spans = Array.from(document.querySelectorAll('div[role="dialog"] span'));
         const usernameSpan = spans.find(
           (el) =>
             el.innerText &&
-            el.innerText.length < 30 && // filter out long captions
+            el.innerText.length < 30 &&
             !el.innerText.includes("•") &&
             !el.innerText.includes("Follow") &&
             /^[A-Za-z0-9._]+$/.test(el.innerText)
@@ -58,36 +59,72 @@ const { loginInstagramWithVerification, loadCredentialsFromEnv, sleep } = requir
         return usernameSpan ? usernameSpan.innerText.trim() : null;
       });
 
+      const caption = await page.evaluate(() => {
+        const captionEl = document.querySelector("h1");
+        return captionEl ? captionEl.innerText.trim() : "";
+      });
+
+      const hashtags = await page.evaluate(() => {
+        const captionEl = document.querySelector("h1");
+        if (!captionEl) return [];
+        const hashtagEls = captionEl.querySelectorAll('a[href^="/explore/tags/"]');
+        return Array.from(hashtagEls).map((a) => a.innerText.trim());
+      });
+
+      const time = await page.evaluate(() => {
+        const timeEl = document.querySelector("time");
+        return timeEl ? timeEl.getAttribute("datetime") : null;
+      });
+
+      const postData = {
+        username: user,
+        profile_url: user ? `https://www.instagram.com/${user}/` : "",
+        caption,
+        hashtags,
+        post_date: time,
+      };
+
       if (user) {
-        usernames.add(user);
-        console.log(`✅ [${i + 1}] Username scraped: ${user}`);
+        scrapedData.push(postData);
+        console.log(`✅ ${user} — ${caption?.slice(0, 40)}...`);
       } else {
-        console.log(`⚠️ [${i + 1}] No username found on this post.`);
+        console.log("⚠️ Username not found for this post.");
       }
 
-      // Click the "Next" button
-      const nextButton = await page.$('button._abl- svg[aria-label="Next"]');
-      if (!nextButton) {
-        console.log("🚫 No next button found — probably last post.");
+      // ⏭️ Move to next post
+      const nextBtn = await page.$('button._abl- svg[aria-label="Next"]');
+      if (!nextBtn) {
+        console.log("🚫 No next button — end of posts.");
         break;
       }
 
-      await nextButton.click();
-      console.log("➡️ Moved to next post...");
-      await sleep(4000); // wait for next post to load
+      await nextBtn.click();
+      console.log("➡️ Moving to next post...");
+      await sleep(4000);
     } catch (err) {
-      console.log(`❌ Error on iteration ${i + 1}: ${err.message}`);
+      console.log(`❌ Error on post ${i + 1}: ${err.message}`);
       break;
     }
   }
 
-  // 7️⃣ Save results to CSV
-  if (usernames.size > 0) {
-    const csvData = Array.from(usernames).join("\n");
-    fs.writeFileSync(OUTPUT_FILE, csvData);
-    console.log(`💾 Saved ${usernames.size} usernames to ${OUTPUT_FILE}`);
+  // 4️⃣ Save to CSV
+  if (scrapedData.length > 0) {
+    const csvHeader = "username,profile_url,caption,hashtags,post_date\n";
+    const csvRows = scrapedData.map((d) =>
+      [
+        d.username,
+        d.profile_url,
+        `"${(d.caption || "").replace(/"/g, '""')}"`,
+        `"${(d.hashtags || []).join(", ")}"`,
+        d.post_date || "",
+      ].join(",")
+    );
+    const csvContent = csvHeader + csvRows.join("\n");
+
+    fs.writeFileSync(OUTPUT_FILE, csvContent);
+    console.log(`💾 Saved ${scrapedData.length} posts → ${OUTPUT_FILE}`);
   } else {
-    console.log("⚠️ No usernames scraped.");
+    console.log("⚠️ No posts scraped.");
   }
 
   await browser.close();
