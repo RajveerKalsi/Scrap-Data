@@ -1,131 +1,162 @@
 const puppeteer = require("puppeteer");
-const fs = require("fs");
-const path = require("path");
 const { loginInstagramWithVerification, loadCredentialsFromEnv, sleep } = require("./common");
+const {
+  getAllKeywords,
+  addPostDetails,
+  getScrapedUsernamesByBrandAndKeyword, 
+  closePool,
+} = require("./db.utils");
+
+MAX_POST_COUNT = 5;
 
 (async () => {
   const { username, password } = loadCredentialsFromEnv();
-  const keyword = "parentalhack";
-  const OUTPUT_FILE = path.join(__dirname, "hashtag_posts.csv");
+
+  // 1️⃣ Load keywords & brand info from DB
+  const keywords = await getAllKeywords();
+  if (!keywords.length) {
+    console.log("⚠️ No keywords found in DB.");
+    await closePool();
+    return;
+  }
+
+  console.log(`📚 Found ${keywords.length} keywords in DB.`);
 
   const browser = await puppeteer.launch({
     headless: false,
     defaultViewport: null,
   });
-
   const page = await browser.newPage();
 
-  // 1️⃣ Login
+  // 2️⃣ Login to Instagram
   console.log("🔐 Logging into Instagram...");
   await loginInstagramWithVerification(page, username, password);
 
-  // 2️⃣ Go to hashtag explore page
-  const searchUrl = `https://www.instagram.com/explore/tags/${keyword}/`;
-  console.log(`🔎 Navigating to ${searchUrl}`);
-  await page.goto(searchUrl, { waitUntil: "networkidle2" });
+  // 3️⃣ Loop through each keyword
+  for (const { id: keyword_id, brand_id, brand_name, keyword } of keywords) {
+    console.log(`\n🚀 Starting scrape for brand: ${brand_name}, keyword: #${keyword}`);
 
-  // Wait for posts to load
-  await page.waitForSelector('a[href^="/p/"], a[href^="/reel/"]', { timeout: 20000 });
-  console.log("📸 Posts loaded...");
+    const searchUrl = `https://www.instagram.com/explore/tags/${keyword}/`;
+    await page.goto(searchUrl, { waitUntil: "networkidle2" });
 
-  // Click first post
-  await page.evaluate(() => {
-    const firstPost = document.querySelector('a[href^="/p/"], a[href^="/reel/"]');
-    if (firstPost) firstPost.click();
-  });
+    await page.waitForSelector('a[href^="/p/"], a[href^="/reel/"]', { timeout: 20000 });
+    console.log("📸 Posts loaded...");
 
-  await page.waitForSelector('div[role="dialog"]', { timeout: 15000 });
-  console.log("📄 First post dialog opened!");
+    // Click first post
+    await page.evaluate(() => {
+      const firstPost = document.querySelector('a[href^="/p/"], a[href^="/reel/"]');
+      if (firstPost) firstPost.click();
+    });
 
-  const scrapedData = [];
+    await page.waitForSelector('div[role="dialog"]', { timeout: 15000 });
+    console.log("📄 First post dialog opened!");
 
-  // 3️⃣ Loop through N posts
-  for (let i = 0; i < 10; i++) {
-    try {
-      console.log(`\n🧩 Scraping post ${i + 1}...`);
-      await page.waitForSelector('div[role="dialog"]', { timeout: 10000 });
+    // Fetch already scraped usernames for this brand+keyword
+    const existingUsernames = new Set(
+      await getScrapedUsernamesByBrandAndKeyword(brand_id, keyword_id)
+    );
+    const newUsernames = new Set();
+    let scrapedCount = 0;
 
-      // Use your robust username extraction method here:
-      const user = await page.evaluate(() => {
-        const spans = Array.from(document.querySelectorAll('div[role="dialog"] span'));
-        const usernameSpan = spans.find(
-          (el) =>
-            el.innerText &&
-            el.innerText.length < 30 &&
-            !el.innerText.includes("•") &&
-            !el.innerText.includes("Follow") &&
-            /^[A-Za-z0-9._]+$/.test(el.innerText)
-        );
-        return usernameSpan ? usernameSpan.innerText.trim() : null;
-      });
+    while (scrapedCount < MAX_POST_COUNT) {
+      try {
+        await page.waitForSelector('div[role="dialog"]', { timeout: 10000 });
 
-      const caption = await page.evaluate(() => {
-        const captionEl = document.querySelector("h1");
-        return captionEl ? captionEl.innerText.trim() : "";
-      });
+        // 🧠 Extract username
+        const user = await page.evaluate(() => {
+          const spans = Array.from(document.querySelectorAll('div[role="dialog"] span'));
+          const usernameSpan = spans.find(
+            (el) =>
+              el.innerText &&
+              el.innerText.length < 30 &&
+              !el.innerText.includes("•") &&
+              !el.innerText.includes("Follow") &&
+              /^[A-Za-z0-9._]+$/.test(el.innerText)
+          );
+          return usernameSpan ? usernameSpan.innerText.trim() : null;
+        });
 
-      const hashtags = await page.evaluate(() => {
-        const captionEl = document.querySelector("h1");
-        if (!captionEl) return [];
-        const hashtagEls = captionEl.querySelectorAll('a[href^="/explore/tags/"]');
-        return Array.from(hashtagEls).map((a) => a.innerText.trim());
-      });
+        if (!user) {
+          console.log("⚠️ Username not found, skipping...");
+          const next = await page.$('button._abl- svg[aria-label="Next"]');
+          if (!next) break;
+          await next.click();
+          await sleep(4000);
+          continue;
+        }
 
-      const time = await page.evaluate(() => {
-        const timeEl = document.querySelector("time");
-        return timeEl ? timeEl.getAttribute("datetime") : null;
-      });
+        // 🔍 Skip already scraped usernames (both DB + session)
+        if (existingUsernames.has(user)) {
+          console.log(`⏭️ Username ${user} already in DB, skipping...`);
+          const next = await page.$('button._abl- svg[aria-label="Next"]');
+          if (!next) break;
+          await next.click();
+          await sleep(4000);
+          continue;
+        }
 
-      const postData = {
-        username: user,
-        profile_url: user ? `https://www.instagram.com/${user}/` : "",
-        caption,
-        hashtags,
-        post_date: time,
-      };
+        if (newUsernames.has(user)) {
+          console.log(`⏭️ Duplicate username in this session: ${user}`);
+          const next = await page.$('button._abl- svg[aria-label="Next"]');
+          if (!next) break;
+          await next.click();
+          await sleep(4000);
+          continue;
+        }
 
-      if (user) {
-        scrapedData.push(postData);
-        console.log(`✅ ${user} — ${caption?.slice(0, 40)}...`);
-      } else {
-        console.log("⚠️ Username not found for this post.");
-      }
+        // ✅ New username found
+        newUsernames.add(user);
+        scrapedCount++;
+        console.log(`✅ [${scrapedCount}] New username: ${user}`);
 
-      // ⏭️ Move to next post
-      const nextBtn = await page.$('button._abl- svg[aria-label="Next"]');
-      if (!nextBtn) {
-        console.log("🚫 No next button — end of posts.");
+        // Capture post details
+        const postData = await page.evaluate(() => {
+          const captionEl = document.querySelector("h1");
+          const caption = captionEl ? captionEl.innerText.trim() : "";
+          const hashtagEls = captionEl ? captionEl.querySelectorAll('a[href^="/explore/tags/"]') : [];
+          const hashtags = Array.from(hashtagEls).map((a) => a.innerText.trim());
+          const timeEl = document.querySelector("time");
+          const postDate = timeEl ? timeEl.getAttribute("datetime") : null;
+          const postUrl = window.location.href;
+          return { caption, hashtags, postDate, postUrl };
+        });
+
+        // 💾 Save to DB
+        await addPostDetails({
+          brand_id,
+          keyword_id,
+          postUrl: postData.postUrl,
+          username: user,
+          profileUrl: `https://www.instagram.com/${user}/`,
+          caption: postData.caption,
+          hashtags: postData.hashtags,
+          likes: null,
+          views: null,
+          postDate: postData.postDate,
+        });
+
+        // Stop if reached MAX_POST_COUNT usernames
+        if (scrapedCount >= MAX_POST_COUNT) break;
+
+        // ➡️ Move next
+        const nextBtn = await page.$('button._abl- svg[aria-label="Next"]');
+        if (!nextBtn) {
+          console.log("🚫 No next button — end of posts.");
+          break;
+        }
+
+        await nextBtn.click();
+        await sleep(4000);
+      } catch (err) {
+        console.log(`❌ Error: ${err.message}`);
         break;
       }
-
-      await nextBtn.click();
-      console.log("➡️ Moving to next post...");
-      await sleep(4000);
-    } catch (err) {
-      console.log(`❌ Error on post ${i + 1}: ${err.message}`);
-      break;
     }
-  }
 
-  // 4️⃣ Save to CSV
-  if (scrapedData.length > 0) {
-    const csvHeader = "username,profile_url,caption,hashtags,post_date\n";
-    const csvRows = scrapedData.map((d) =>
-      [
-        d.username,
-        d.profile_url,
-        `"${(d.caption || "").replace(/"/g, '""')}"`,
-        `"${(d.hashtags || []).join(", ")}"`,
-        d.post_date || "",
-      ].join(",")
-    );
-    const csvContent = csvHeader + csvRows.join("\n");
-
-    fs.writeFileSync(OUTPUT_FILE, csvContent);
-    console.log(`💾 Saved ${scrapedData.length} posts → ${OUTPUT_FILE}`);
-  } else {
-    console.log("⚠️ No posts scraped.");
+    console.log(`\n✅ Completed ${scrapedCount} NEW usernames for #${keyword}`);
   }
 
   await browser.close();
+  await closePool();
+  console.log("🏁 Scraping completed for all keywords.");
 })();

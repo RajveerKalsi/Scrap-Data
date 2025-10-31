@@ -215,6 +215,20 @@ async function getScrapedProfileUrls() {
     }
 }
 
+async function getScrapedUsernamesByBrandAndKeyword(brand_id, keyword_id) {
+  const query = `
+    SELECT username 
+    FROM scrapper.instagram_post_details
+    WHERE brand_id = $1 AND keyword_id = $2
+  `;
+  const { rows } = await pool.query(query, [brand_id, keyword_id]);
+  return rows
+    .filter(r => r.username) // skip null usernames
+    .map(r => r.username.toLowerCase());
+}
+
+
+
 // Add profile details
 async function addProfileDetails(profile) {
     const {
@@ -295,5 +309,6 @@ module.exports = {
   addProfileDetails,
   getProfilesToMessage,
   markMessageSent,
+  getScrapedUsernamesByBrandAndKeyword,
   closePool,
 };
