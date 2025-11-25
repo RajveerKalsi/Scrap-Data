@@ -1,0 +1,67 @@
+{
+  "results": [
+    {
+      "content": "<!doctype html><html><head>.."
+      "headers": {
+        "date": "Mon, 24 Nov 2025 13:52:41 GMT",
+        "vary": "User-Agent",
+        "pragma": "no-cache",
+        "server": "nginx",
+        "expires": "Mon, 24 Nov 2025 13:52:41 GMT",
+        "x-cache": "TCP_MISS from a23-55-100-229.deploy.akamaitechnologies.com (AkamaiGHost/22.3.2.1-992afe98b9405e84f19be223dce3e955) (-)",
+        "x-tt-logid": "2025112413524068988992DC5B9A075D5E",
+        "content-type": "text/html; charset=UTF-8",
+        "x-gw-dst-psm": "i18n_ecom_fe.growth.brandy_builder",
+        "x-powered-by": "Goofy Node",
+        "cache-control": "max-age=0, no-cache, no-store",
+        "server-timing": "cdn-cache; desc=MISS, edge; dur=7, origin; dur=1625",
+        "x-tt-trace-id": "00-25112413524068988992DC5B9A075D5E-4C6FE96B539B110E-00",
+        "content-length": "45573",
+        "x-tt-trace-tag": "id=16;cdn-cache=miss;type=dyn",
+        "x-tt-trace-host": "01cc0dc47a76fb01eff99736decdce92752377d2c9833a1695bde8ab017dd30b42411f2992b39d6895d01d255c5a2e43534e738cabc83ed21f5907213f72d47cde54ead9effd3d723ee286affae825c770d56bfab5821f67753b6cb4962472c19e",
+        "content-encoding": "br",
+        "content-language": "en",
+        "x-modernjs-render": "server",
+        "x-pumbaa-web-avail": "1",
+        "reporting-endpoints": "csp-endpoint=\"https://mon16-normal-useast5.tiktokv.us/monitor_browser/collect/batch/security/?bid=tiktok_pns\"",
+        "x-akamai-request-id": "403acad8",
+        "x-bytefaas-request-id": "2025112413524068988992DC5B9A075D5E",
+        "x-origin-response-time": "1625,23.55.100.229",
+        "x-bytefaas-execution-duration": "1594.54"
+      },
+      "cookies": [
+        {
+          "key": "ttwid",
+          "path": "/",
+          "value": "1%7CnXTtBpL-9ADl3AP0Zw5B9Nb31jL1AEd4jE1u_S--G3w%7C1763992360%7C2d4a3cfcb768c3a524192e0e8b707755bfc8c0cad10ebbed3fce71cca7c3869f",
+          "domain": "",
+          "secure": true,
+          "comment": "",
+          "expires": "Tue, 24 Nov 2026 13:52:40 GMT",
+          "max-age": "",
+          "version": "",
+          "httponly": true,
+          "samesite": ""
+        },
+        {
+          "key": "webID",
+          "path": "/",
+          "value": "7576289458997102094",
+          "domain": "",
+          "secure": true,
+          "comment": "",
+          "expires": "Mon, 24 Nov 2025 13:57:40 GMT",
+          "max-age": "",
+          "version": "",
+          "httponly": "",
+          "samesite": ""
+        }
+      ],
+      "status_code": 200,
+      "query": "ball",
+      "task_id": "7398720176536953857",
+      "created_at": "2025-11-24 13:52:31",
+      "updated_at": "2025-11-24 13:52:42"
+    }
+  ]
+}

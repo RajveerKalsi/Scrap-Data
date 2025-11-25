@@ -4,15 +4,15 @@
 // require("dotenv").config();
 
 // const TRACKERS = [
-  //   { table: "BBTracker", columns: ['"trackingDate"', '"parentSku"', '"marketplaceSku"', '"itemId"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-//   { table: "OfficeDepotTracker", columns: ['"trackingDate"', '"itemId"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-//   { table: "BnHTracker", columns: ['"trackingDate"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"usedPrice"', '"url"'] },
+//     // { table: "BBTracker", columns: ['"trackingDate"', '"parentSku"', '"marketplaceSku"', '"itemId"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
+//   // { table: "OfficeDepotTracker", columns: ['"trackingDate"', '"itemId"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
+//   // { table: "BnHTracker", columns: ['"trackingDate"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"usedPrice"', '"url"'] },
 //   { table: "HomeDepotTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-//   { table: "NewEggTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-//   { table: "odpBusinessTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-//   { table: "QuillTracker", columns: ['"trackingDate"', '"itemId"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-//   { table: "StaplesTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-//   { table: "TargetTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"'] },
+//   // { table: "NewEggTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
+//   // { table: "odpBusinessTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
+//   // { table: "QuillTracker", columns: ['"trackingDate"', '"itemId"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
+//   // { table: "StaplesTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
+//   // { table: "TargetTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"'] },
 // ];
 
 // async function fetchTrackerData(trackerTable, columns, targetDate) {
@@ -74,7 +74,7 @@
 //   console.log(`🎉 Export complete: ${filePath}`);
 // }
 
-// exportAllToExcel(process.argv[2]); // Run like: node export_all_trackers.js 2025-07-29
+// exportAllToExcel(process.argv[2]); // Run like: node csv_export.js 2025-07-29
 
 
 
@@ -92,8 +92,8 @@ const TRACKERS = [
   // { table: "NewEggTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
   // { table: "odpBusinessTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
   // { table: "QuillTracker", columns: ['"trackingDate"', '"itemId"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-  // { table: "StaplesTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
-  { table: "TargetTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"'] },
+  { table: "StaplesTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"', '"url"'] },
+  // { table: "TargetTracker", columns: ['"trackingDate"', '"itemId"', '"parentSku"', '"marketplaceSku"', '"productTitle"', '"price"', '"inStock"'] },
 ];
 
 async function exportTrackerDataToCSV(trackerTable, columns, targetDate) {
@@ -139,4 +139,4 @@ async function exportAll(targetDate = new Date().toISOString().split("T")[0]) {
   }
 }
 
-exportAll(process.argv[2]); // Optionally pass a date argument like: node export_all_trackers.js 2025-07-29
+exportAll(process.argv[2]); // Optionally pass a date argument like: node csv_export.js 2025-07-29

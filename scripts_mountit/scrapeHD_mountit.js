@@ -19,33 +19,70 @@ async function readUrlsFromFile(filePath) {
 }
 
 async function fetchData(url, retries = 10) {
-    let attempt = 0;
-    while (attempt < retries) {
-        try {
-            const { data } = await axios.get(url);
-            return cheerio.load(data);
-        } catch (error) {
-            console.error(`Attempt ${attempt + 1} failed for ${url}: ${error.message}`);
-            attempt++;
-            if (attempt >= retries) {
-                console.error(`Giving up on ${url} after ${retries} attempts.`);
-                return null;
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
+  let attempt = 0;
+
+  while (attempt < retries) {
+    try {
+      const response = await axios.post(
+        "https://scraper-api.smartproxy.com/v2/scrape",
+        {
+          target: "universal",
+          url,
+          headless: "html",
+          geo: "United States",
+          locale: "en-us",
+          domain: "com",
+          device_type: "desktop_chrome",
+          force_headers: true,
+          force_cookies: true
+        },
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Basic VTAwMDAxNDUyNjI6RTZvanNmMmV1OGh3VlI1RGpq`, 
+          },
         }
+      );
+
+      if (
+        response.data &&
+        response.data.results &&
+        response.data.results[0].content
+      ) {
+        return cheerio.load(response.data.results[0].content);
+      } else {
+        console.error("Invalid Smartproxy response:", response.data);
+        return null;
+      }
+    } catch (error) {
+      attempt++;
+      console.error(
+        `Attempt ${attempt} failed for ${url}: ${
+          error.response?.status || error.message
+        }`
+      );
+
+      if (attempt >= retries) return null;
+
+      await new Promise((res) => setTimeout(res, 1000));
     }
-    return null;
+  }
+
+  return null;
 }
+
 
 async function fetchTitle($) {
     return $('h1.sui-h4-bold').text().trim();
 }
 
 async function fetchPrice($) {
-    const dollars = $('.sui-text-9xl').text().trim();
-    const cents = $('.sui-font-display.sui-text-3xl').last().text().trim();
+    const dollars = $('span.sui-text-9xl').first().text().trim();
+    const text3xlSpans = $('span.sui-font-display.sui-text-3xl');
+    const cents = text3xlSpans.last().text().trim();
     return `$${dollars}.${cents}`;
 }
+
 
 async function fetchStock($) {
     const outOfStockMessage = $('div.sui-my-12.sui-mx-auto.sui-p-5.sui-text-danger.sui-font-bold').length;
@@ -71,7 +108,7 @@ async function fetchAllProductsData(data, retries = 50) {
     const missingUrlIds = [];
     let missingUrlCount = 0;
 
-    const limit = process.env.NODE_ENV === 'DEV' ? 10 : data.length;
+    const limit = process.env.NODE_ENV === 'DEV' ? 20 : data.length;
     const batchSize = 10;
     const totalBatches = Math.ceil(limit / batchSize);
 
@@ -122,8 +159,8 @@ async function fetchAllProductsData(data, retries = 50) {
         const validResults = batchResults.filter(data => data);
 
         // Saving results to CSV and Postgres
-        // await saveResultsToCSV(validResults);
-        await saveResultsToPostgres(batchResults);
+        await saveResultsToCSV(validResults);
+        // await saveResultsToPostgres(batchResults);
 
         // Logging batch details
         console.log(`Batch ${batchIndex + 1} processed:`);
@@ -161,7 +198,7 @@ async function saveResultsToCSV(allResults) {
 
     const csv = Papa.unparse(csvData);
 
-    const filePath = '../csvs_mountit/homeDepotSKU.csv';
+    const filePath = '../csvs_mountit/homeDepotTrackerOutput.csv';
 
     // Append to the existing CSV if it exists; otherwise, create a new one
     if (fs.existsSync(filePath)) {

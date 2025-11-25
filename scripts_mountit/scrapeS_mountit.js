@@ -206,8 +206,8 @@ async function fetchAllProductsData(data, retries = 50) {
     // const validResults = batchResults.filter((data) => data);
 
     // Saving results to CSV and Postgres
-    // await saveResultsToCSV(batchResults);
-    await saveResultsToPostgres(batchResults);
+    await saveResultsToCSV(batchResults);
+    // await saveResultsToPostgres(batchResults);
 
     // Logging batch details
     console.log(`Batch ${batchIndex + 1} processed:`);
