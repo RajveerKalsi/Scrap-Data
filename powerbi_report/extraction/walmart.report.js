@@ -64,4 +64,39 @@ export const walmartExtraction = {
 
     return mergedRows;
   },
+
+  processSalesSummarySheet: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheetName = "Sales Summary";
+
+    const sheet = commonUtils.getSheetByName(workbook, sheetName);
+
+    if (!sheet) {
+      throw new Error(`Sheet "${sheetName}" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+
+    const detectedTables = commonUtils.detectTablesInSheet(sheet);
+
+    // Usually Sales Summary has exactly ONE table
+    const table = detectedTables[0];
+
+    const { headers, rows } = commonUtils.extractTableData(sheet, table, {
+      ignoreRowIf: ({ rowTextValues }) => {
+        return rowTextValues.some((text) => text.includes("grand total"));
+      },
+    });
+
+    console.log(`📦 Sales Summary`);
+    console.log(`Headers count: ${headers.length}`);
+    console.log(`Rows count: ${Object.values(rows)[0]?.length ?? 0}`);
+    console.log(`Rows:`, rows);
+
+    return {
+      sheetName,
+      headers,
+      rows,
+    };
+  },
 };

@@ -82,7 +82,9 @@ export const commonUtils = {
     return tables;
   },
 
-  extractTableData: (sheet, table) => {
+  extractTableData: (sheet, table, options = {}) => {
+    const { ignoreRowIf } = options;
+
     const headers = table.headers.map((h) =>
       typeof h === "string" ? h.trim() : String(h)
     );
@@ -95,6 +97,20 @@ export const commonUtils = {
     for (let rowNum = table.startRow; rowNum <= table.endRow; rowNum++) {
       const row = sheet.getRow(rowNum);
       const rowValues = row.values.slice(1);
+
+      const rowTextValues = rowValues
+        .map((v, idx) => row.getCell(idx + 1).text)
+        .filter(Boolean)
+        .map((v) => v.trim().toLowerCase());
+
+      if (
+        ignoreRowIf &&
+        ignoreRowIf({
+          rowTextValues,
+        })
+      ) {
+        continue;
+      }
 
       let hasData = false;
 

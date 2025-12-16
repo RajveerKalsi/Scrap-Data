@@ -11,6 +11,7 @@ const run = async () => {
 
   await walmartExtraction.processContentScoresSheet(filePath);
   await walmartExtraction.processEmailTemplateSheet(filePath);
+  await walmartExtraction.processSalesSummarySheet(filePath);
 };
 
 run();
