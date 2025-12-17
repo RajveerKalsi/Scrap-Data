@@ -42,7 +42,7 @@ export const walmartExtraction = {
     const result = await processSheetByName(workbook, "Content Scores");
 
     if (!result.length) return [];
-    
+
     const tableData = result[0];
 
     await commonDbUtils.insertContentScoreRows(
@@ -88,38 +88,32 @@ export const walmartExtraction = {
     return mergedRows;
   },
 
-  processSalesSummarySheet: async (filePath) => {
+  processSalesSummarySheet: async (filePath, weekInfo) => {
     const workbook = await commonUtils.readWorkbook(filePath);
     const sheetName = "Sales Summary";
 
     const sheet = commonUtils.getSheetByName(workbook, sheetName);
-
-    if (!sheet) {
-      throw new Error(`Sheet "${sheetName}" not found`);
-    }
+    if (!sheet) throw new Error(`Sheet "${sheetName}" not found`);
 
     console.log(`\n📄 Processing sheet: ${sheet.name}`);
 
     const detectedTables = commonUtils.detectTablesInSheet(sheet);
-
     const table = detectedTables[0];
 
-    const { headers, rows } = commonUtils.extractTableData(sheet, table, {
-      ignoreRowIf: ({ rowTextValues }) => {
-        return rowTextValues.some((text) => text.includes("grand total"));
-      },
+    const tableData = commonUtils.extractTableData(sheet, table, {
+      ignoreRowIf: ({ rowTextValues }) =>
+        rowTextValues.some((t) => t.includes("grand total")),
     });
 
-    console.log(`📦 Sales Summary`);
-    console.log(`Headers count: ${headers.length}`);
-    console.log(`Rows count: ${Object.values(rows)[0]?.length ?? 0}`);
-    console.log(`Rows:`, rows);
+    await commonDbUtils.insertSalesSummaryRows(
+      tableData,
+      weekInfo.week,
+      weekInfo.year
+    );
 
-    return {
-      sheetName,
-      headers,
-      rows,
-    };
+    console.log(`✅ Inserted sales summary for Wk ${weekInfo.week}`);
+
+    return tableData;
   },
 
   processAllItemDetailSheet: async (filePath) => {

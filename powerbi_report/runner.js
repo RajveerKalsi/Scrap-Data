@@ -31,9 +31,9 @@ const run = async () => {
     console.log("========================================");
 
     try {
-      await walmartExtraction.processContentScoresSheet(filePath, weekInfo);
+      //   await walmartExtraction.processContentScoresSheet(filePath, weekInfo);
       //   await walmartExtraction.processEmailTemplateSheet(filePath, weekInfo);
-      //   await walmartExtraction.processSalesSummarySheet(filePath, weekInfo);
+      await walmartExtraction.processSalesSummarySheet(filePath, weekInfo);
       //   await walmartExtraction.processAllItemDetailSheet(filePath, weekInfo;
       //   await walmartExtraction.processScorecardAquasonicSheet(filePath, weekInfo);
 
