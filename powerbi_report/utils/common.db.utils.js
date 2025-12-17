@@ -233,6 +233,68 @@ const commonDbUtils = {
 
     await commonDbUtils.query(query, values);
   },
+
+  insertAllItemDetailRows: async (items, reportWeek, reportYear) => {
+    if (!items?.length) return;
+
+    const values = [];
+    const placeholders = [];
+    let idx = 1;
+
+    items.forEach((item) => {
+      Object.entries(item.dates).forEach(([weekKey, metrics]) => {
+        placeholders.push(`(
+        $${idx++}, $${idx++},
+        $${idx++}, $${idx++}, $${idx++}, $${idx++},
+        $${idx++},
+        $${idx++}, $${idx++}, $${idx++}, $${idx++},
+        $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++}
+      )`);
+
+        values.push(
+          reportYear,
+          reportWeek,
+
+          item.acct_dept_nbr,
+          item.vendor_stk_nbr,
+          item.prime_item_nbr,
+          item.prime_item_desc,
+
+          Number(weekKey),
+
+          normalizeNumeric(metrics["POS Sales $"]),
+          normalizeNumeric(metrics["POS Qty"]),
+          normalizeNumeric(metrics["POS Qty if Instock"]),
+          normalizeNumeric(metrics["Units per Store per Week (w/zeros)"]),
+          normalizeNumeric(metrics["Avg Price"]),
+          normalizeNumeric(metrics["Traited Stores"]),
+          normalizeNumeric(metrics["Instock"]),
+          normalizeNumeric(metrics["Forecast"]),
+          normalizeNumeric(metrics["Variance"])
+        );
+      });
+    });
+
+    const query = `
+INSERT INTO walmart_powerbi_reports.all_item_detail (
+  report_year, report_week,
+  acct_dept_nbr, vendor_stk_nbr, prime_item_nbr, prime_item_desc,
+  week_key,
+  pos_sales, pos_qty, pos_qty_if_instock, units_per_store_per_week,
+  avg_price, traited_stores, instock, forecast, variance
+)
+VALUES ${placeholders.join(",")}
+ON CONFLICT (prime_item_nbr, week_key, report_year, report_week)
+DO UPDATE SET
+  pos_sales = EXCLUDED.pos_sales,
+  pos_qty = EXCLUDED.pos_qty,
+  instock = EXCLUDED.instock,
+  forecast = EXCLUDED.forecast,
+  variance = EXCLUDED.variance
+`;
+
+    await commonDbUtils.query(query, values);
+  },
 };
 
 module.exports = {

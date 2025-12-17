@@ -116,15 +116,12 @@ export const walmartExtraction = {
     return tableData;
   },
 
-  processAllItemDetailSheet: async (filePath) => {
+  processAllItemDetailSheet: async (filePath, weekInfo) => {
     const workbook = await commonUtils.readWorkbook(filePath);
     const sheetName = "All Item Detail";
 
     const sheet = commonUtils.getSheetByName(workbook, sheetName);
-
-    if (!sheet) {
-      throw new Error(`Sheet "${sheetName}" not found`);
-    }
+    if (!sheet) throw new Error(`Sheet "${sheetName}" not found`);
 
     console.log(`\n📄 Processing sheet: ${sheet.name}`);
 
@@ -149,13 +146,13 @@ export const walmartExtraction = {
 
     const items = commonUtils.extractAllItemDetailData(sheet, table);
 
-    console.log(`📦 Items extracted: ${items.length}`);
-    console.log(items[0]);
+    await commonDbUtils.insertAllItemDetailRows(
+      items,
+      weekInfo.week,
+      weekInfo.year
+    );
 
-    // items.forEach((item, index) => {
-    //   console.log(`\n📦 Item ${index + 1}`);
-    //   console.log(JSON.stringify(item, null, 2));
-    // });
+    console.log(`✅ Inserted All Item Detail rows`);
 
     return items;
   },
