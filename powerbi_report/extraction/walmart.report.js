@@ -133,7 +133,7 @@ export const walmartExtraction = {
     const items = commonUtils.extractAllItemDetailData(sheet, table);
 
     console.log(`📦 Items extracted: ${items.length}`);
-    console.log(items[0]); // sanity check
+    console.log(items[0]);
 
     // items.forEach((item, index) => {
     //   console.log(`\n📦 Item ${index + 1}`);
@@ -141,5 +141,26 @@ export const walmartExtraction = {
     // });
 
     return items;
+  },
+
+  processScorecardAquasonicSheet: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheetName = "Scorecard Aquasonic";
+
+    const sheet = commonUtils.getSheetByName(workbook, sheetName);
+
+    if (!sheet) {
+      throw new Error(`Sheet "${sheetName}" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+
+    const rawRows = commonUtils.extractScorecardData(sheet);
+    const mergedRows = commonUtils.mergeMetricPeriodRows(rawRows);
+
+    console.log(`📊 Scorecard rows: ${mergedRows.length}`);
+    console.log(mergedRows);
+
+    return mergedRows;
   },
 };

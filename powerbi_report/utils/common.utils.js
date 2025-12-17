@@ -232,13 +232,11 @@ export const commonUtils = {
       typeof h === "string" ? h.trim() : String(h)
     );
 
-    // Identify column indexes
     const colIndex = {};
     headers.forEach((h, i) => {
       colIndex[h] = i;
     });
 
-    // Static columns
     const STATIC_COLS = [
       "Acct Dept Nbr",
       "Vendor Stk Nbr",
@@ -247,7 +245,6 @@ export const commonUtils = {
       "Data Type",
     ];
 
-    // Date columns = headers that look like YYYYWW
     const dateColumns = headers.filter((h) => /^\d{6}$/.test(h));
 
     const itemsMap = new Map();
@@ -290,5 +287,60 @@ export const commonUtils = {
     }
 
     return Array.from(itemsMap.values());
+  },
+
+  extractScorecardData: (sheet) => {
+    const periodRow = sheet.getRow(1).values.slice(1);
+    const subHeaderRow = sheet.getRow(3).values.slice(1);
+
+    const periods = [];
+    let currentPeriod = null;
+
+    periodRow.forEach((cell, index) => {
+      if (cell) {
+        currentPeriod = cell.toString().trim();
+      }
+
+      const subHeader = subHeaderRow[index];
+      if (currentPeriod && subHeader) {
+        periods.push({
+          period: currentPeriod,
+          key: subHeader.toString().trim().toLowerCase(),
+          columnIndex: index + 1,
+        });
+      }
+    });
+
+    const rows = [];
+    let currentSection = null;
+
+    for (let rowNum = 4; rowNum <= sheet.rowCount; rowNum++) {
+      const row = sheet.getRow(rowNum);
+      const firstCellText = row.getCell(1).text?.trim();
+
+      if (!firstCellText) continue;
+
+      const hasNumbers = row.values.some((v) => typeof v === "number");
+
+      if (!hasNumbers) {
+        currentSection = firstCellText;
+        continue;
+      }
+
+      const metricName = firstCellText;
+
+      periods.forEach((p) => {
+        const value = row.getCell(p.columnIndex).value;
+
+        rows.push({
+          section: currentSection,
+          metric: metricName,
+          period: p.period,
+          [p.key]: value ?? null,
+        });
+      });
+    }
+
+    return rows;
   },
 };

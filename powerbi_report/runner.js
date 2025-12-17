@@ -9,10 +9,11 @@ const run = async () => {
     "AquaSonic WM Report Wk40-2025 (1).xlsx"
   );
 
-  await walmartExtraction.processContentScoresSheet(filePath);
-  await walmartExtraction.processEmailTemplateSheet(filePath);
-  await walmartExtraction.processSalesSummarySheet(filePath);
-  await walmartExtraction.processAllItemDetailSheet(filePath);
+//   await walmartExtraction.processContentScoresSheet(filePath);
+//   await walmartExtraction.processEmailTemplateSheet(filePath);
+//   await walmartExtraction.processSalesSummarySheet(filePath);
+//   await walmartExtraction.processAllItemDetailSheet(filePath);
+  await walmartExtraction.processScorecardAquasonicSheet(filePath);
 };
 
 run();
