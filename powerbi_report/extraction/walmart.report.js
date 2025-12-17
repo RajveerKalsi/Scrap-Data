@@ -36,9 +36,24 @@ const processSheetByName = async (workbook, sheetName) => {
 };
 
 export const walmartExtraction = {
-  processContentScoresSheet: async (filePath) => {
+  processContentScoresSheet: async (filePath, weekInfo) => {
     const workbook = await commonUtils.readWorkbook(filePath);
-    return processSheetByName(workbook, "Content Scores");
+
+    const result = await processSheetByName(workbook, "Content Scores");
+
+    if (!result.length) return [];
+    
+    const tableData = result[0];
+
+    await commonDbUtils.insertContentScoreRows(
+      tableData,
+      weekInfo.week,
+      weekInfo.year
+    );
+
+    console.log(`✅ Inserted content scores for Wk ${weekInfo.week}`);
+
+    return tableData;
   },
 
   processEmailTemplateSheet: async (filePath, weekInfo) => {

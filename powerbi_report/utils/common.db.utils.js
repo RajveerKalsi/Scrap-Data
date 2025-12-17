@@ -82,6 +82,54 @@ const commonDbUtils = {
 
     await commonDbUtils.query(query, values);
   },
+
+  insertContentScoreRows: async (tableData, week, year) => {
+    if (!tableData || !tableData.rows) return;
+
+    const {
+      rows: {
+        "Prime Item Number": primeItemNbrs = [],
+        "Item Desc": itemDescs = [],
+        UPC: upcs = [],
+        "Content Score": contentScores = [],
+      },
+    } = tableData;
+
+    const values = [];
+    const placeholders = [];
+
+    primeItemNbrs.forEach((_, i) => {
+      const base = i * 6;
+
+      placeholders.push(
+        `($${base + 1}, $${base + 2}, $${base + 3},
+        $${base + 4}, $${base + 5}, $${base + 6})`
+      );
+
+      values.push(
+        week,
+        year,
+        primeItemNbrs[i],
+        itemDescs[i] ?? null,
+        upcs[i] ?? null,
+        normalizeNumeric(contentScores[i])
+      );
+    });
+
+    const query = `
+    INSERT INTO walmart_powerbi_reports.content_scores
+      (report_week, report_year, prime_item_nbr, item_desc, upc, content_score)
+    VALUES
+      ${placeholders.join(",")}
+    ON CONFLICT (report_week, report_year, prime_item_nbr)
+    DO UPDATE SET
+      content_score = EXCLUDED.content_score,
+      item_desc = EXCLUDED.item_desc,
+      upc = EXCLUDED.upc
+  `;
+
+    await commonDbUtils.query(query, values);
+  },
 };
 
 module.exports = {
