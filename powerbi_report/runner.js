@@ -1,19 +1,54 @@
 import path from "path";
+import fs from "fs";
 import { walmartExtraction } from "./extraction/walmart.report.js";
 
-const run = async () => {
-  const filePath = path.join(
-    process.cwd(),
-    "files",
-    "walmart",
-    "AquaSonic WM Report Wk40-2025 (1).xlsx"
-  );
+const WALMART_FILES_DIR = path.join(
+  process.cwd(),
+  "files",
+  "walmart"
+);
 
-//   await walmartExtraction.processContentScoresSheet(filePath);
-//   await walmartExtraction.processEmailTemplateSheet(filePath);
-//   await walmartExtraction.processSalesSummarySheet(filePath);
-//   await walmartExtraction.processAllItemDetailSheet(filePath);
-  await walmartExtraction.processScorecardAquasonicSheet(filePath);
+const extractWeekFromFilename = (filename) => {
+  const match = filename.match(/Wk(\d+)-(\d{4})/i);
+  if (!match) return null;
+
+  return {
+    week: Number(match[1]),
+    year: Number(match[2]),
+  };
+};
+
+const run = async () => {
+  const files = fs
+    .readdirSync(WALMART_FILES_DIR)
+    .filter((file) => file.endsWith(".xlsx"));
+
+  console.log(`📂 Found ${files.length} Walmart files\n`);
+
+  for (const file of files) {
+    const filePath = path.join(WALMART_FILES_DIR, file);
+    const weekInfo = extractWeekFromFilename(file);
+
+    console.log("========================================");
+    console.log(`📄 Processing file: ${file}`);
+    console.log(`📅 Week info:`, weekInfo);
+    console.log("========================================");
+
+    try {
+    //   await walmartExtraction.processContentScoresSheet(filePath);
+      await walmartExtraction.processEmailTemplateSheet(filePath);
+    //   await walmartExtraction.processSalesSummarySheet(filePath);
+    //   await walmartExtraction.processAllItemDetailSheet(filePath);
+    //   await walmartExtraction.processScorecardAquasonicSheet(filePath);
+
+      console.log(`✅ Finished: ${file}\n`);
+    } catch (error) {
+      console.error(`❌ Failed processing ${file}`);
+      console.error(error);
+    }
+  }
+
+  console.log("🎉 All files processed");
 };
 
 run();
