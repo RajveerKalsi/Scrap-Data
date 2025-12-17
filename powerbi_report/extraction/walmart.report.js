@@ -157,12 +157,11 @@ export const walmartExtraction = {
     return items;
   },
 
-  processScorecardAquasonicSheet: async (filePath) => {
+  processScorecardAquasonicSheet: async (filePath, weekInfo) => {
     const workbook = await commonUtils.readWorkbook(filePath);
     const sheetName = "Scorecard Aquasonic";
 
     const sheet = commonUtils.getSheetByName(workbook, sheetName);
-
     if (!sheet) {
       throw new Error(`Sheet "${sheetName}" not found`);
     }
@@ -172,8 +171,15 @@ export const walmartExtraction = {
     const rawRows = commonUtils.extractScorecardData(sheet);
     const mergedRows = commonUtils.mergeMetricPeriodRows(rawRows);
 
-    console.log(`📊 Scorecard rows: ${mergedRows.length}`);
-    console.log(mergedRows);
+    await commonDbUtils.insertScorecardAquasonicRows(
+      mergedRows,
+      weekInfo.week,
+      weekInfo.year
+    );
+
+    console.log(
+      `✅ Inserted ${mergedRows.length} scorecard rows for Wk ${weekInfo.week}`
+    );
 
     return mergedRows;
   },

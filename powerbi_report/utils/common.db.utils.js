@@ -295,6 +295,51 @@ DO UPDATE SET
 
     await commonDbUtils.query(query, values);
   },
+
+  insertScorecardAquasonicRows: async (rows, reportWeek, reportYear) => {
+    if (!rows?.length) return;
+
+    const values = [];
+    const placeholders = [];
+
+    rows.forEach((r, i) => {
+      const base = i * 8;
+
+      placeholders.push(
+        `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4},
+        $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8})`
+      );
+
+      values.push(
+        reportYear,
+        reportWeek,
+
+        r.section,
+        r.metric,
+        r.period,
+
+        normalizeNumeric(r.ty), // this_year
+        normalizeNumeric(r.ly), // last_year
+        normalizeNumeric(r.diff) // difference
+      );
+    });
+
+    const query = `
+    INSERT INTO walmart_powerbi_reports.scorecard_aquasonic (
+      report_year, report_week,
+      section, metric, period,
+      this_year, last_year, difference
+    )
+    VALUES ${placeholders.join(",")}
+    ON CONFLICT (report_year, report_week, section, metric, period)
+    DO UPDATE SET
+      this_year = EXCLUDED.this_year,
+      last_year = EXCLUDED.last_year,
+      difference = EXCLUDED.difference
+  `;
+
+    await commonDbUtils.query(query, values);
+  },
 };
 
 module.exports = {
