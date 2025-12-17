@@ -1,4 +1,5 @@
 import { commonUtils } from "../utils/common.utils.js";
+import { commonDbUtils } from "../utils/common.db.utils.js";
 
 const processSheetByName = async (workbook, sheetName) => {
   const sheet = commonUtils.getSheetByName(workbook, sheetName);
@@ -40,7 +41,7 @@ export const walmartExtraction = {
     return processSheetByName(workbook, "Content Scores");
   },
 
-  processEmailTemplateSheet: async (filePath) => {
+  processEmailTemplateSheet: async (filePath, weekInfo) => {
     const workbook = await commonUtils.readWorkbook(filePath);
     const sheet = commonUtils.getSheetByName(workbook, "Email Template");
 
@@ -59,8 +60,15 @@ export const walmartExtraction = {
 
     const mergedRows = commonUtils.mergeMetricPeriodRows(rawRows);
 
-    console.log(`📊 Final rows: ${mergedRows.length}`);
-    console.log(mergedRows);
+    await commonDbUtils.insertEmailTemplateRows(
+      mergedRows,
+      weekInfo.week,
+      weekInfo.year
+    );
+
+    console.log(
+      `✅ Inserted ${mergedRows.length} email template rows for Wk ${weekInfo.week}`
+    );
 
     return mergedRows;
   },

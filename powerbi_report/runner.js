@@ -2,11 +2,7 @@ import path from "path";
 import fs from "fs";
 import { walmartExtraction } from "./extraction/walmart.report.js";
 
-const WALMART_FILES_DIR = path.join(
-  process.cwd(),
-  "files",
-  "walmart"
-);
+const WALMART_FILES_DIR = path.join(process.cwd(), "files", "walmart");
 
 const extractWeekFromFilename = (filename) => {
   const match = filename.match(/Wk(\d+)-(\d{4})/i);
@@ -35,11 +31,11 @@ const run = async () => {
     console.log("========================================");
 
     try {
-    //   await walmartExtraction.processContentScoresSheet(filePath);
-      await walmartExtraction.processEmailTemplateSheet(filePath);
-    //   await walmartExtraction.processSalesSummarySheet(filePath);
-    //   await walmartExtraction.processAllItemDetailSheet(filePath);
-    //   await walmartExtraction.processScorecardAquasonicSheet(filePath);
+      //   await walmartExtraction.processContentScoresSheet(filePath, weekInfo);
+      await walmartExtraction.processEmailTemplateSheet(filePath, weekInfo);
+      //   await walmartExtraction.processSalesSummarySheet(filePath, weekInfo);
+      //   await walmartExtraction.processAllItemDetailSheet(filePath, weekInfo;
+      //   await walmartExtraction.processScorecardAquasonicSheet(filePath, weekInfo);
 
       console.log(`✅ Finished: ${file}\n`);
     } catch (error) {
