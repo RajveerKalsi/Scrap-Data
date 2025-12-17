@@ -207,4 +207,88 @@ export const commonUtils = {
 
     return Array.from(map.values());
   },
+
+  findHeaderRowByColumns: (sheet, requiredHeaders) => {
+    for (let rowNum = 1; rowNum <= sheet.rowCount; rowNum++) {
+      const row = sheet.getRow(rowNum);
+      const rowTexts = row.values
+        .slice(1)
+        .map((v, idx) => row.getCell(idx + 1).text?.trim());
+
+      const matchCount = requiredHeaders.filter((h) =>
+        rowTexts.includes(h)
+      ).length;
+
+      if (matchCount >= requiredHeaders.length) {
+        return rowNum;
+      }
+    }
+
+    return null;
+  },
+
+  extractAllItemDetailData: (sheet, table) => {
+    const headers = table.headers.map((h) =>
+      typeof h === "string" ? h.trim() : String(h)
+    );
+
+    // Identify column indexes
+    const colIndex = {};
+    headers.forEach((h, i) => {
+      colIndex[h] = i;
+    });
+
+    // Static columns
+    const STATIC_COLS = [
+      "Acct Dept Nbr",
+      "Vendor Stk Nbr",
+      "Prime Item Nbr",
+      "Prime Item Desc",
+      "Data Type",
+    ];
+
+    // Date columns = headers that look like YYYYWW
+    const dateColumns = headers.filter((h) => /^\d{6}$/.test(h));
+
+    const itemsMap = new Map();
+
+    for (let rowNum = table.startRow; rowNum <= table.endRow; rowNum++) {
+      const row = sheet.getRow(rowNum);
+      const rowValues = row.values.slice(1);
+
+      const acctDeptNbr = rowValues[colIndex["Acct Dept Nbr"]];
+      const vendorStkNbr = rowValues[colIndex["Vendor Stk Nbr"]];
+      const primeItemNbr = rowValues[colIndex["Prime Item Nbr"]];
+      const primeItemDesc = rowValues[colIndex["Prime Item Desc"]];
+      const dataType = rowValues[colIndex["Data Type"]];
+
+      if (!primeItemNbr || !dataType) continue;
+
+      const key = `${acctDeptNbr}__${vendorStkNbr}__${primeItemNbr}`;
+
+      if (!itemsMap.has(key)) {
+        itemsMap.set(key, {
+          acct_dept_nbr: acctDeptNbr,
+          vendor_stk_nbr: vendorStkNbr,
+          prime_item_nbr: primeItemNbr,
+          prime_item_desc: primeItemDesc,
+          dates: {},
+        });
+      }
+
+      const item = itemsMap.get(key);
+
+      dateColumns.forEach((dateCol) => {
+        const value = rowValues[colIndex[dateCol]] ?? null;
+
+        if (!item.dates[dateCol]) {
+          item.dates[dateCol] = {};
+        }
+
+        item.dates[dateCol][dataType] = value;
+      });
+    }
+
+    return Array.from(itemsMap.values());
+  },
 };

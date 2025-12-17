@@ -79,7 +79,6 @@ export const walmartExtraction = {
 
     const detectedTables = commonUtils.detectTablesInSheet(sheet);
 
-    // Usually Sales Summary has exactly ONE table
     const table = detectedTables[0];
 
     const { headers, rows } = commonUtils.extractTableData(sheet, table, {
@@ -98,5 +97,49 @@ export const walmartExtraction = {
       headers,
       rows,
     };
+  },
+
+  processAllItemDetailSheet: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheetName = "All Item Detail";
+
+    const sheet = commonUtils.getSheetByName(workbook, sheetName);
+
+    if (!sheet) {
+      throw new Error(`Sheet "${sheetName}" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+
+    const headerRow = commonUtils.findHeaderRowByColumns(sheet, [
+      "Acct Dept Nbr",
+      "Vendor Stk Nbr",
+      "Prime Item Nbr",
+      "Prime Item Desc",
+      "Data Type",
+    ]);
+
+    if (!headerRow) {
+      throw new Error("Could not locate header row for All Item Detail");
+    }
+
+    const table = {
+      headerRow,
+      headers: sheet.getRow(headerRow).values.slice(1),
+      startRow: headerRow + 1,
+      endRow: sheet.rowCount,
+    };
+
+    const items = commonUtils.extractAllItemDetailData(sheet, table);
+
+    console.log(`📦 Items extracted: ${items.length}`);
+    console.log(items[0]); // sanity check
+
+    // items.forEach((item, index) => {
+    //   console.log(`\n📦 Item ${index + 1}`);
+    //   console.log(JSON.stringify(item, null, 2));
+    // });
+
+    return items;
   },
 };
