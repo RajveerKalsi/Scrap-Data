@@ -460,6 +460,41 @@ DO UPDATE SET
 
     await commonDbUtils.query(query, values);
   },
+
+  insertBestBuyCoreShipmentRows: async (rows) => {
+    if (!rows?.length) return;
+
+    const values = [];
+    const placeholders = [];
+    let idx = 1;
+
+    rows.forEach((sku) => {
+      sku.weekly_shipments.forEach((week) => {
+        placeholders.push(`(
+        $${idx++},  -- bby_sku
+        $${idx++},  -- week_end
+        $${idx++}   -- units
+      )`);
+
+        values.push(sku.bby_sku, week.week_end, normalizeNumeric(week.units));
+      });
+    });
+
+    const query = `
+    INSERT INTO bestbuy_powerbi_reports.core_shipments (
+      bby_sku,
+      week_end,
+      units
+    )
+    VALUES ${placeholders.join(",")}
+    ON CONFLICT (bby_sku, week_end)
+    DO UPDATE SET
+      units = EXCLUDED.units,
+      updated_at = NOW()
+  `;
+
+    await commonDbUtils.query(query, values);
+  },
 };
 
 module.exports = {

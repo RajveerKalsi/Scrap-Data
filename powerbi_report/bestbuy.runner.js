@@ -37,4 +37,4 @@ const filePath = path.join(
   "Aquasonic Master-  SKUs and Sales.xlsx"
 );
 
-await bestBuyExtraction.exploreSkuInfo(filePath);
+await bestBuyExtraction.exploreCoreShipments(filePath);

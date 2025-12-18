@@ -198,4 +198,109 @@ export const bestBuyExtraction = {
 
     return results;
   },
+
+  exploreCoreShipments: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Core Shipments");
+
+    if (!sheet) {
+      throw new Error(`Sheet "Core Shipments" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+
+    // ----------------------------
+    // HEADER ROW (row 1)
+    // ----------------------------
+    const headerRow = sheet.getRow(1);
+    const headers = headerRow.values.slice(1);
+
+    // ----------------------------
+    // DATE COLUMNS
+    // ----------------------------
+    const dateColumns = headers
+      .map((h, idx) => {
+        if (h instanceof Date) {
+          return {
+            header: h,
+            index: idx + 1,
+            iso: toISODate(h),
+          };
+        }
+
+        if (typeof h === "string" && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(h)) {
+          const parsed = new Date(h);
+          return {
+            header: h,
+            index: idx + 1,
+            iso: toISODate(parsed),
+          };
+        }
+
+        return null;
+      })
+      .filter(Boolean);
+
+    console.log(
+      "📅 Shipment weeks:",
+      dateColumns.map((d) => d.iso)
+    );
+
+    // ----------------------------
+    // DATA ROWS
+    // ----------------------------
+    const results = [];
+
+    for (let rowNum = 2; rowNum <= sheet.rowCount; rowNum++) {
+      const row = sheet.getRow(rowNum);
+
+      const bbySkuRaw = row.getCell(2).value; // "BBY SKU"
+      const title = row.getCell(5).text?.toLowerCase();
+
+      // ❌ Skip invalid rows
+      if (!bbySkuRaw || isNaN(Number(bbySkuRaw))) continue;
+      if (title?.includes("special cost")) continue;
+
+      const weekly_shipments = [];
+
+      dateColumns.forEach(({ index, iso }) => {
+        const raw = row.getCell(index).value;
+
+        const units =
+          typeof raw === "string"
+            ? Number(raw.replace(/,/g, ""))
+            : Number(raw ?? 0);
+
+        if (!Number.isNaN(units) && units !== 0) {
+          weekly_shipments.push({
+            week_end: iso,
+            units,
+          });
+        }
+      });
+
+      // ❌ Skip rows with no shipments
+      if (!weekly_shipments.length) continue;
+
+      results.push({
+        bby_sku: Number(bbySkuRaw),
+        weekly_shipments,
+      });
+    }
+
+    // ----------------------------
+    // INSPECTION
+    // ----------------------------
+    console.log(`\n🧪 Parsed ${results.length} Core Shipment SKUs\n`);
+
+    await commonDbUtils.insertBestBuyCoreShipmentRows(results);
+
+    console.log(
+      `✅ Inserted Core Shipments into bestbuy_powerbi_reports.core_shipments`
+    );
+
+    return results;
+
+    return results;
+  },
 };
