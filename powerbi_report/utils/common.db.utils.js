@@ -403,6 +403,63 @@ DO UPDATE SET
 
     await commonDbUtils.query(query, values);
   },
+
+  insertBestBuySkuInfoRows: async (rows) => {
+    if (!rows?.length) return;
+
+    const values = [];
+    const placeholders = [];
+    let idx = 1;
+
+    rows.forEach((r) => {
+      placeholders.push(`(
+      $${idx++}, $${idx++}, $${idx++},
+      $${idx++}, $${idx++},
+      $${idx++}, $${idx++},
+      $${idx++}, $${idx++},
+      $${idx++}, $${idx++}
+    )`);
+
+      values.push(
+        r.bby_sku, // 1
+        r.gln, // 2
+        r.upc, // 3
+        r.mfg_part_number, // 4
+        r.title, // 5
+        normalizeNumeric(r.bby_cost), // 6
+        normalizeNumeric(r.msrp), // 7
+        r.online, // 8
+        r.in_stock, // 9
+        r.product_link, // 10
+        r.notes // 11
+      );
+    });
+
+    const query = `
+    INSERT INTO bestbuy_powerbi_reports.sku_info (
+      bby_sku, gln, upc,
+      mfg_part_number, title,
+      bby_cost, msrp,
+      online, in_stock,
+      product_link, notes
+    )
+    VALUES ${placeholders.join(",")}
+    ON CONFLICT (bby_sku)
+    DO UPDATE SET
+      gln = EXCLUDED.gln,
+      upc = EXCLUDED.upc,
+      mfg_part_number = EXCLUDED.mfg_part_number,
+      title = EXCLUDED.title,
+      bby_cost = EXCLUDED.bby_cost,
+      msrp = EXCLUDED.msrp,
+      online = EXCLUDED.online,
+      in_stock = EXCLUDED.in_stock,
+      product_link = EXCLUDED.product_link,
+      notes = EXCLUDED.notes
+  `;
+
+    await commonDbUtils.query(query, values);
+  },
 };
 
 module.exports = {

@@ -42,7 +42,6 @@ const parseYesNo = (val) => {
   return null;
 };
 
-
 export const bestBuyExtraction = {
   explore10WeekGross: async (filePath) => {
     const workbook = await commonUtils.readWorkbook(filePath);
@@ -132,5 +131,71 @@ export const bestBuyExtraction = {
 
     return results;
   },
-  
+  exploreSkuInfo: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "SKU Info");
+
+    if (!sheet) {
+      throw new Error(`Sheet "SKU Info" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+
+    // ----------------------------
+    // HEADER ROW (row 1)
+    // ----------------------------
+    const headerRow = sheet.getRow(1);
+    const headers = headerRow.values.slice(1).map((h) => h?.toString().trim());
+
+    console.log("🧾 Headers:", headers);
+
+    // ----------------------------
+    // DATA ROWS
+    // ----------------------------
+    const results = [];
+
+    for (let rowNum = 2; rowNum <= sheet.rowCount; rowNum++) {
+      const row = sheet.getRow(rowNum);
+      const bbySkuRaw = row.getCell(1).value;
+
+      // Skip brand headers / placeholders
+      if (!bbySkuRaw || isNaN(Number(bbySkuRaw))) continue;
+
+      const rowData = {};
+      headers.forEach((h, i) => {
+        rowData[h] = row.getCell(i + 1).value;
+      });
+
+      const skuObj = {
+        bby_sku: Number(rowData["BBY SKU"]),
+        gln: rowData["GLN"]?.toString(),
+        upc: rowData["UPC"]?.toString(),
+        mfg_part_number: rowData["MFG"],
+        title: rowData["Title"],
+
+        bby_cost: parseCurrency(rowData["BBY Cost"]),
+        msrp: parseCurrency(rowData["MSRP"]),
+
+        online: parseYesNo(rowData["Online"]),
+        in_stock: parseYesNo(rowData["In Stock"]),
+
+        product_link: rowData["Link"] ?? null,
+        notes: rowData["Notes"] ?? null,
+      };
+
+      results.push(skuObj);
+    }
+
+    // ----------------------------
+    // INSPECTION
+    // ----------------------------
+    console.log(`\n🧪 Parsed ${results.length} SKU Info rows\n`);
+    await commonDbUtils.insertBestBuySkuInfoRows(results);
+
+    console.log(
+      `✅ Inserted ${results.length} rows into bestbuy_powerbi_reports.sku_info`
+    );
+
+    return results;
+  },
 };

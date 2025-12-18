@@ -34,7 +34,7 @@ const filePath = path.join(
   process.cwd(),
   "files",
   "bestbuy",
-  "DAJ_BestBuyCompany_10Week_2025-12-06_Gross.xlsx"
+  "Aquasonic Master-  SKUs and Sales.xlsx"
 );
 
-await bestBuyExtraction.explore10WeekGross(filePath);
+await bestBuyExtraction.exploreSkuInfo(filePath);
