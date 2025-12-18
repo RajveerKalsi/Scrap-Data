@@ -877,4 +877,117 @@ export const bestBuyExtraction = {
       core_online,
     };
   },
+
+  exploreSalesYearly: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Sales (YEARLY)");
+
+    if (!sheet) {
+      throw new Error(`Sheet "Sales (YEARLY)" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+    console.log("🔍 Extracting: Yearly SDF + CORE (excluding totals)");
+
+    const results = [];
+
+    const YEAR_COLUMNS = {
+      2021: { u: "D", c: "E", sc: "F", m: "G", sm: "H" },
+      2022: { u: "J", c: "K", sc: "L", m: "M", sm: "N" },
+      2023: { u: "P", c: "Q", sc: "R", m: "S", sm: "T" },
+      2024: { u: "V", c: "W", sc: "X", m: "Y", sm: "Z" },
+      2025: { u: "AB", c: "AC", sc: "AD", m: "AE", sm: "AF" },
+    };
+
+    const num = (cell) => {
+      if (!cell) return null;
+
+      const v = cell.value;
+
+      // ----------------------------
+      // 1️⃣ Formula cell
+      // ----------------------------
+      if (v && typeof v === "object" && v.formula !== undefined) {
+        // Prefer cached result if present (0 is valid)
+        if (v.result !== null && v.result !== undefined) {
+          return Number.isFinite(v.result) ? v.result : null;
+        }
+
+        // 🔥 FALLBACK: parse displayed text
+        const txt = cell.text?.replace(/[$,]/g, "").trim();
+        if (txt === "") return null;
+
+        const n = Number(txt);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      // ----------------------------
+      // 2️⃣ Plain number
+      // ----------------------------
+      if (typeof v === "number") {
+        return Number.isFinite(v) ? v : null;
+      }
+
+      // ----------------------------
+      // 3️⃣ String number / currency
+      // ----------------------------
+      if (typeof v === "string") {
+        const cleaned = v.replace(/[$,]/g, "").trim();
+        if (cleaned === "") return null;
+
+        const n = Number(cleaned);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      return null;
+    };
+
+    const extractRange = (startRow, endRow, channel) => {
+      for (let row = startRow; row <= endRow; row++) {
+        const mfg = sheet.getCell(`A${row}`).text?.trim();
+        if (!mfg) continue;
+
+        for (const [year, cols] of Object.entries(YEAR_COLUMNS)) {
+          const units = num(sheet.getCell(`${cols.u}${row}`));
+          const bby_cost = num(sheet.getCell(`${cols.c}${row}`));
+          const sales_at_cost = num(sheet.getCell(`${cols.sc}${row}`));
+          const msrp = num(sheet.getCell(`${cols.m}${row}`));
+          const sales_at_msrp = num(sheet.getCell(`${cols.sm}${row}`));
+
+          const hasAnyData =
+            units !== null ||
+            bby_cost !== null ||
+            sales_at_cost !== null ||
+            msrp !== null ||
+            sales_at_msrp !== null;
+
+          if (!hasAnyData) continue;
+
+          results.push({
+            mfg_part_number: mfg,
+            channel_type: channel,
+            year: Number(year),
+            units,
+            bby_cost,
+            sales_at_cost,
+            msrp,
+            sales_at_msrp,
+          });
+        }
+      }
+    };
+
+    // ✅ SDF
+    extractRange(3, 56, "SDF");
+
+    // ✅ CORE
+    extractRange(61, 67, "CORE");
+
+    console.log(`\n🧪 Parsed ${results.length} yearly rows\n`);
+    results.slice(0, 10).forEach((r, i) => {
+      console.log(`📦 Row ${i + 1}`, r);
+    });
+
+    return results;
+  },
 };
