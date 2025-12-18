@@ -42,6 +42,41 @@ const parseYesNo = (val) => {
   return null;
 };
 
+const parseUnits = (raw) => {
+  if (raw === null || raw === undefined) return null;
+
+  // Excel date object → NOT units
+  if (raw instanceof Date) return null;
+
+  // Excel timestamp in ms → NOT units
+  if (typeof raw === "number" && raw > 10_000_000) return null;
+
+  // String numbers
+  if (typeof raw === "string") {
+    const cleaned = raw.replace(/,/g, "");
+    const num = Number(cleaned);
+    return Number.isFinite(num) ? num : null;
+  }
+
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? raw : null;
+  }
+
+  return null;
+};
+
+const dedupeSalesTotalRows = (rows) => {
+  const map = new Map();
+
+  rows.forEach((r) => {
+    const key = `${r.mfg_part_number}|${r.channel_type}|${r.week_end}`;
+
+    map.set(key, r);
+  });
+
+  return Array.from(map.values());
+};
+
 export const bestBuyExtraction = {
   explore10WeekGross: async (filePath) => {
     const workbook = await commonUtils.readWorkbook(filePath);
@@ -300,7 +335,546 @@ export const bestBuyExtraction = {
     );
 
     return results;
+  },
+
+  exploreSalesTotalTable1: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Sales TOTAL");
+
+    if (!sheet) {
+      throw new Error(`Sheet "Sales TOTAL" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+    console.log("🔍 Extracting: SDF Sell Thru (Online)");
+
+    // ----------------------------
+    // FIND HEADER ROW
+    // ----------------------------
+    let headerRowNum = null;
+
+    for (let i = 1; i <= sheet.rowCount; i++) {
+      const cellText = sheet.getRow(i).getCell(3).text;
+      if (cellText?.includes("SDF Sell Thru")) {
+        headerRowNum = i;
+        break;
+      }
+    }
+
+    if (!headerRowNum) {
+      throw new Error("SDF Sell Thru (Online) table not found");
+    }
+
+    const headerRow = sheet.getRow(headerRowNum);
+    const headers = headerRow.values.slice(1);
+
+    // ----------------------------
+    // DATE COLUMNS
+    // ----------------------------
+    const dateColumns = headers
+      .map((h, idx) => {
+        if (h instanceof Date) {
+          return {
+            index: idx + 1,
+            week_end: toISODate(h),
+          };
+        }
+
+        if (typeof h === "string" && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(h)) {
+          return {
+            index: idx + 1,
+            week_end: toISODate(new Date(h)),
+          };
+        }
+
+        return null;
+      })
+      .filter(Boolean);
+
+    console.log(
+      "📅 Weeks:",
+      dateColumns.map((d) => d.week_end)
+    );
+
+    // ----------------------------
+    // DATA ROWS
+    // ----------------------------
+    const results = [];
+
+    for (let rowNum = headerRowNum + 1; rowNum <= sheet.rowCount; rowNum++) {
+      const row = sheet.getRow(rowNum);
+
+      const mfgPart = row.getCell(3).value; // "SDF Sell Thru (Online)" column
+      const title = row.getCell(4).text?.toLowerCase();
+
+      // ❌ Skip invalid / placeholder rows
+      if (!mfgPart || typeof mfgPart !== "string") continue;
+      if (title?.includes("bundle")) continue;
+      if (title?.includes("ultimate")) continue;
+      if (title?.includes("vlookup")) continue;
+
+      dateColumns.forEach(({ index, week_end }) => {
+        const raw = row.getCell(index).value;
+
+        const units = parseUnits(raw);
+
+        if (!Number.isNaN(units) && units !== 0) {
+          results.push({
+            mfg_part_number: mfgPart,
+            channel_type: "SDF_ONLINE",
+            week_end,
+            units,
+          });
+        }
+      });
+    }
+
+    // ----------------------------
+    // INSPECTION
+    // ----------------------------
+    console.log(`\n🧪 Parsed ${results.length} SDF Sell Thru rows\n`);
+    results.slice(0, 10).forEach((r, i) => {
+      console.log(`📦 Row ${i + 1}`, r);
+    });
 
     return results;
+  },
+
+  exploreSalesTotalTable2: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Sales TOTAL");
+
+    if (!sheet) {
+      throw new Error(`Sheet "Sales TOTAL" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+    console.log("🔍 Extracting: Core Sell thru (TOTAL)");
+
+    // ----------------------------
+    // FIND HEADER ROW
+    // ----------------------------
+    let headerRowNum = null;
+
+    for (let i = 1; i <= sheet.rowCount; i++) {
+      const row = sheet.getRow(i);
+
+      const rowText = row.values
+        .slice(1)
+        .map((v) => {
+          if (!v) return "";
+          if (typeof v === "string") return v.toLowerCase();
+          if (v.richText)
+            return v.richText
+              .map((r) => r.text)
+              .join("")
+              .toLowerCase();
+          return v.toString().toLowerCase();
+        })
+        .join(" ");
+
+      if (rowText.includes("core sell thru") && rowText.includes("total")) {
+        headerRowNum = i;
+        break;
+      }
+    }
+
+    if (!headerRowNum) {
+      throw new Error("Core Sell thru (TOTAL) table not found");
+    }
+
+    if (!headerRowNum) {
+      throw new Error("Core Sell thru (TOTAL) table not found");
+    }
+
+    const headerRow = sheet.getRow(headerRowNum);
+
+    // ----------------------------
+    // DATE COLUMNS
+    // ----------------------------
+    const dateColumns = [];
+
+    headerRow.eachCell((cell, colNumber) => {
+      const v = cell.value;
+
+      if (v instanceof Date) {
+        dateColumns.push({
+          col: colNumber, // ✅ real column index
+          week_end: toISODate(v),
+        });
+        return;
+      }
+
+      if (typeof v === "string" && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v)) {
+        dateColumns.push({
+          col: colNumber,
+          week_end: toISODate(new Date(v)),
+        });
+      }
+    });
+
+    console.log(
+      "📅 Weeks:",
+      dateColumns.map((d) => d.week_end)
+    );
+
+    // ----------------------------
+    // DATA ROWS
+    // ----------------------------
+    const results = [];
+
+    for (let rowNum = headerRowNum + 1; rowNum <= sheet.rowCount; rowNum++) {
+      const row = sheet.getRow(rowNum);
+
+      let mfgPart = null;
+      let title = "";
+
+      // Scan first 3 columns (BBY SKU may be blank)
+      for (let c = 1; c <= 3; c++) {
+        const val = row.getCell(c).value;
+        if (typeof val === "string" && val.trim()) {
+          mfgPart = val.trim();
+          title = row.getCell(c + 1).text?.toLowerCase() ?? "";
+          break;
+        }
+      }
+
+      // Skip garbage rows
+      if (!mfgPart) continue;
+      if (mfgPart.toLowerCase().includes("sku")) continue;
+
+      dateColumns.forEach(({ col, week_end }) => {
+        const raw = row.getCell(col).value;
+
+        const units = parseUnits(raw);
+
+        if (units !== null && !Number.isNaN(units)) {
+          results.push({
+            mfg_part_number: mfgPart,
+            channel_type: "CORE_TOTAL",
+            week_end,
+            units,
+          });
+        }
+      });
+    }
+
+    // ----------------------------
+    // INSPECTION
+    // ----------------------------
+    console.log(`\n🧪 Parsed ${results.length} Core TOTAL Sell Thru rows\n`);
+    results.slice(0, 10).forEach((r, i) => {
+      console.log(`📦 Row ${i + 1}`, r);
+    });
+
+    return results;
+  },
+
+  exploreSalesTotalTable3: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Sales TOTAL");
+
+    if (!sheet) {
+      throw new Error(`Sheet "Sales TOTAL" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+    console.log("🔍 Extracting: Core Sell thru (Brick & Mortar)");
+
+    // ----------------------------
+    // FIND HEADER ROW
+    // ----------------------------
+    let headerRowNum = null;
+
+    for (let i = 1; i <= sheet.rowCount; i++) {
+      const row = sheet.getRow(i);
+
+      const rowText = row.values
+        .slice(1)
+        .map((v) => {
+          if (!v) return "";
+          if (typeof v === "string") return v.toLowerCase();
+          if (v.richText)
+            return v.richText
+              .map((r) => r.text)
+              .join("")
+              .toLowerCase();
+          return v.toString().toLowerCase();
+        })
+        .join(" ");
+
+      if (
+        rowText.includes("core sell thru") &&
+        rowText.includes("brick") &&
+        rowText.includes("mortar")
+      ) {
+        headerRowNum = i;
+        break;
+      }
+    }
+
+    if (!headerRowNum) {
+      throw new Error("Core Sell thru (Brick & Mortar) table not found");
+    }
+
+    const headerRow = sheet.getRow(headerRowNum);
+
+    // ----------------------------
+    // DATE COLUMNS
+    // ----------------------------
+    const dateColumns = [];
+
+    headerRow.eachCell((cell, colNumber) => {
+      const v = cell.value;
+
+      if (v instanceof Date) {
+        dateColumns.push({
+          col: colNumber,
+          week_end: toISODate(v),
+        });
+        return;
+      }
+
+      if (typeof v === "string" && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v)) {
+        dateColumns.push({
+          col: colNumber,
+          week_end: toISODate(new Date(v)),
+        });
+      }
+    });
+
+    console.log(
+      "📅 Weeks:",
+      dateColumns.map((d) => d.week_end)
+    );
+
+    // ----------------------------
+    // DATA ROWS
+    // ----------------------------
+    const results = [];
+
+    for (let rowNum = headerRowNum + 1; rowNum <= sheet.rowCount; rowNum++) {
+      const row = sheet.getRow(rowNum);
+
+      let mfgPart = null;
+      let title = "";
+
+      // Scan first 3 columns:
+      // [BBY SKU] [MFG PART] [TITLE]
+      for (let c = 1; c <= 3; c++) {
+        const val = row.getCell(c).value;
+        if (typeof val === "string" && val.trim()) {
+          mfgPart = val.trim();
+          title = row.getCell(c + 1).text?.toLowerCase() ?? "";
+          break;
+        }
+      }
+
+      // ❌ Skip junk rows
+      if (!mfgPart) continue;
+      if (mfgPart.toLowerCase().includes("sku")) continue;
+
+      dateColumns.forEach(({ col, week_end }) => {
+        const raw = row.getCell(col).value;
+
+        const units = parseUnits(raw);
+
+        if (units !== null && !Number.isNaN(units)) {
+          results.push({
+            mfg_part_number: mfgPart,
+            channel_type: "CORE_BM",
+            week_end,
+            units,
+          });
+        }
+      });
+    }
+
+    // ----------------------------
+    // INSPECTION
+    // ----------------------------
+    console.log(`\n🧪 Parsed ${results.length} Core Brick & Mortar rows\n`);
+    results.slice(0, 10).forEach((r, i) => {
+      console.log(`📦 Row ${i + 1}`, r);
+    });
+
+    return results;
+  },
+
+  exploreSalesTotalTable4: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Sales TOTAL");
+
+    if (!sheet) {
+      throw new Error(`Sheet "Sales TOTAL" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+    console.log("🔍 Extracting: Core Sell thru (Online)");
+
+    // ----------------------------
+    // FIND HEADER ROW
+    // ----------------------------
+    let headerRowNum = null;
+
+    for (let i = 1; i <= sheet.rowCount; i++) {
+      const row = sheet.getRow(i);
+
+      const rowText = row.values
+        .slice(1)
+        .map((v) => {
+          if (!v) return "";
+          if (typeof v === "string") return v.toLowerCase();
+          if (v.richText)
+            return v.richText
+              .map((r) => r.text)
+              .join("")
+              .toLowerCase();
+          return v.toString().toLowerCase();
+        })
+        .join(" ");
+
+      if (rowText.includes("core sell thru") && rowText.includes("online")) {
+        headerRowNum = i;
+        break;
+      }
+    }
+
+    if (!headerRowNum) {
+      throw new Error("Core Sell thru (Online) table not found");
+    }
+
+    const headerRow = sheet.getRow(headerRowNum);
+
+    // ----------------------------
+    // DATE COLUMNS
+    // ----------------------------
+    const dateColumns = [];
+
+    headerRow.eachCell((cell, colNumber) => {
+      const v = cell.value;
+
+      if (v instanceof Date) {
+        dateColumns.push({
+          col: colNumber,
+          week_end: toISODate(v),
+        });
+        return;
+      }
+
+      if (typeof v === "string" && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(v)) {
+        dateColumns.push({
+          col: colNumber,
+          week_end: toISODate(new Date(v)),
+        });
+      }
+    });
+
+    console.log(
+      "📅 Weeks:",
+      dateColumns.map((d) => d.week_end)
+    );
+
+    // ----------------------------
+    // DATA ROWS
+    // ----------------------------
+    const results = [];
+
+    for (let rowNum = headerRowNum + 1; rowNum <= sheet.rowCount; rowNum++) {
+      const row = sheet.getRow(rowNum);
+
+      let mfgPart = null;
+      let title = "";
+
+      // Scan first 3 columns
+      for (let c = 1; c <= 3; c++) {
+        const val = row.getCell(c).value;
+        if (typeof val === "string" && val.trim()) {
+          mfgPart = val.trim();
+          title = row.getCell(c + 1).text?.toLowerCase() ?? "";
+          break;
+        }
+      }
+
+      // ❌ Skip junk rows
+      if (!mfgPart) continue;
+      if (mfgPart.toLowerCase().includes("sku")) continue;
+
+      dateColumns.forEach(({ col, week_end }) => {
+        const raw = row.getCell(col).value;
+
+        const units = parseUnits(raw);
+
+        if (units !== null && !Number.isNaN(units)) {
+          results.push({
+            mfg_part_number: mfgPart,
+            channel_type: "CORE_ONLINE",
+            week_end,
+            units,
+          });
+        }
+      });
+    }
+
+    // ----------------------------
+    // INSPECTION
+    // ----------------------------
+    console.log(`\n🧪 Parsed ${results.length} Core Online rows\n`);
+    results.slice(0, 10).forEach((r, i) => {
+      console.log(`📦 Row ${i + 1}`, r);
+    });
+
+    return results;
+  },
+
+  runSalesTotalExtractors: async (filePath) => {
+    console.log("\n🚀 Starting Sales TOTAL extraction pipeline\n");
+
+    // ----------------------------
+    // Extract
+    // ----------------------------
+    const sdf_online = await bestBuyExtraction.exploreSalesTotalTable1(
+      filePath
+    );
+    const core_total = await bestBuyExtraction.exploreSalesTotalTable2(
+      filePath
+    );
+    const core_bm = await bestBuyExtraction.exploreSalesTotalTable3(filePath);
+    const core_online = await bestBuyExtraction.exploreSalesTotalTable4(
+      filePath
+    );
+
+    // ----------------------------
+    // Combine
+    // ----------------------------
+    const allRowsRaw = [
+      ...sdf_online,
+      ...core_total,
+      ...core_bm,
+      ...core_online,
+    ];
+
+    console.log(`📦 Raw rows: ${allRowsRaw.length}`);
+
+    const allRows = dedupeSalesTotalRows(allRowsRaw);
+
+    console.log(`🧹 Deduped rows: ${allRows.length}`);
+
+    await commonDbUtils.insertBestBuySalesTotalRows(allRows);
+
+    console.log("\n✅ Sales TOTAL rows stored successfully\n");
+
+    console.log("📊 Summary:");
+    console.log("• SDF Online:", sdf_online.length);
+    console.log("• Core Total:", core_total.length);
+    console.log("• Core Brick & Mortar:", core_bm.length);
+    console.log("• Core Online:", core_online.length);
+
+    return {
+      sdf_online,
+      core_total,
+      core_bm,
+      core_online,
+    };
   },
 };

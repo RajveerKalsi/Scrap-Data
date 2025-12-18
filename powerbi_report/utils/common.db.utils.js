@@ -495,6 +495,56 @@ DO UPDATE SET
 
     await commonDbUtils.query(query, values);
   },
+
+  insertBestBuySalesTotalRows: async (rows) => {
+    if (!rows?.length) return;
+
+    const BATCH_SIZE = 1000;
+
+    for (let offset = 0; offset < rows.length; offset += BATCH_SIZE) {
+      const batch = rows.slice(offset, offset + BATCH_SIZE);
+
+      const values = [];
+      const placeholders = [];
+      let idx = 1;
+
+      batch.forEach((r) => {
+        placeholders.push(`(
+        $${idx++}, $${idx++}, $${idx++}, $${idx++}
+      )`);
+
+        values.push(
+          r.mfg_part_number,
+          r.channel_type,
+          r.week_end,
+          normalizeNumeric(r.units)
+        );
+      });
+
+      const query = `
+      INSERT INTO bestbuy_powerbi_reports.sales_total_sell_thru (
+        mfg_part_number,
+        channel_type,
+        week_end,
+        units
+      )
+      VALUES ${placeholders.join(",")}
+      ON CONFLICT (mfg_part_number, channel_type, week_end)
+      DO UPDATE SET
+        units = EXCLUDED.units,
+        updated_at = NOW()
+    `;
+
+      await commonDbUtils.query(query, values);
+
+      console.log(
+        `✅ Inserted batch ${offset + 1} → ${Math.min(
+          offset + BATCH_SIZE,
+          rows.length
+        )}`
+      );
+    }
+  },
 };
 
 module.exports = {
