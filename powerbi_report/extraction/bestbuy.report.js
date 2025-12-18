@@ -77,6 +77,42 @@ const dedupeSalesTotalRows = (rows) => {
   return Array.from(map.values());
 };
 
+const safeNumber = (cell) => {
+  if (!cell) return null;
+
+  const v = cell.value;
+
+  // Excel error
+  if (v && typeof v === "object" && v.error) return null;
+  if (cell.text === "#ERROR!") return null;
+
+  // Formula with cached result
+  if (v && typeof v === "object" && v.formula !== undefined) {
+    if (v.result !== null && v.result !== undefined) {
+      return Number.isFinite(v.result) ? v.result : null;
+    }
+
+    const txt = cell.text?.replace(/[$,% ,]/g, "").trim();
+    const n = Number(txt);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // String
+  if (typeof v === "string") {
+    if (v.includes("#ERROR")) return null;
+    const cleaned = v.replace(/[$,% ,]/g, "").trim();
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Number
+  if (typeof v === "number") {
+    return Number.isFinite(v) ? v : null;
+  }
+
+  return null;
+};
+
 export const bestBuyExtraction = {
   explore10WeekGross: async (filePath) => {
     const workbook = await commonUtils.readWorkbook(filePath);
@@ -987,6 +1023,116 @@ export const bestBuyExtraction = {
     results.slice(0, 10).forEach((r, i) => {
       console.log(`📦 Row ${i + 1}`, r);
     });
+
+    return results;
+  },
+
+  exploreSkuLevel: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Sku Level");
+
+    if (!sheet) {
+      throw new Error(`Sheet "Sku Level" not found`);
+    }
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+    console.log("🔍 Extracting: SKU Level Detail (clean rows only)");
+
+    // ----------------------------
+    // FIND HEADER ROW
+    // ----------------------------
+    let headerRowNum = null;
+    let headers = [];
+
+    for (let i = 1; i <= sheet.rowCount; i++) {
+      const row = sheet.getRow(i);
+      const text = row.values
+        .slice(1)
+        .map((v) => (typeof v === "string" ? v.toLowerCase() : ""))
+        .join(" ");
+
+      if (
+        text.includes("sku") &&
+        text.includes("description") &&
+        text.includes("model")
+      ) {
+        headerRowNum = i;
+        headers = row.values.slice(1).map((h) => h?.toString().trim());
+        break;
+      }
+    }
+
+    if (!headerRowNum) {
+      throw new Error("SKU Level header row not found");
+    }
+
+    console.log("🧾 Headers:", headers);
+
+    const col = (name) => headers.indexOf(name) + 1;
+
+    // ----------------------------
+    // DATA ROWS
+    // ----------------------------
+    const results = [];
+
+    const colNth = (name, nth = 1) => {
+      let count = 0;
+      for (let i = 0; i < headers.length; i++) {
+        if (headers[i] === name) {
+          count++;
+          if (count === nth) return i + 1;
+        }
+      }
+      return -1;
+    };
+
+    for (let rowNum = headerRowNum + 1; rowNum <= sheet.rowCount; rowNum++) {
+      const row = sheet.getRow(rowNum);
+
+      const skuCell = row.getCell(col("Sku"));
+      const sku = safeNumber(skuCell);
+
+      // ❌ Skip totals / garbage
+      if (!sku) continue;
+
+      const mfg = row.getCell(col("Model")).text?.trim();
+      if (!mfg) continue;
+
+      results.push({
+        bby_sku: sku,
+        description: row.getCell(col("Description")).text?.trim() ?? null,
+        upc: row.getCell(col("UPC")).text?.trim() ?? null,
+        mfg_part_number: mfg,
+
+        // ---- CA / Demand Fill ----
+        ca_pct: safeNumber(row.getCell(col("CA %"))),
+        ca_pct_ly: safeNumber(row.getCell(col("CA % LY"))),
+
+        demand_fill_pct: safeNumber(row.getCell(col("Demand Fill %"))),
+        demand_fill_pct_ly: safeNumber(row.getCell(col("Demand Fill % LY"))),
+
+        // ---- On Hand ----
+        on_hand: safeNumber(row.getCell(col("OH"))),
+        on_hand_ly: safeNumber(row.getCell(col("OH LY"))),
+
+        store_count: safeNumber(row.getCell(col("# Store"))),
+
+        // ---- POS UNITS ----
+        pos_units_ty: safeNumber(row.getCell(colNth("LW TY", 1))),
+        pos_units_ly: safeNumber(row.getCell(colNth("LW LY", 1))),
+
+        // ---- POS DOLLARS ----
+        pos_dollars_ty: safeNumber(row.getCell(colNth("LW TY", 2))),
+        pos_dollars_ly: safeNumber(row.getCell(colNth("LW LY", 2))),
+      });
+    }
+
+    console.log(`\n🧪 Parsed ${results.length} SKU Level rows`);
+    await commonDbUtils.insertBestBuySkuLevelRows(results);
+
+    console.log(
+      `✅ Inserted ${results.length} rows into bestbuy_powerbi_reports.sku_level`
+    );
 
     return results;
   },
