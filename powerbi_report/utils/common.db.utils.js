@@ -340,6 +340,69 @@ DO UPDATE SET
 
     await commonDbUtils.query(query, values);
   },
+
+  insertBestBuy10WeekGrossRows: async (skus) => {
+    if (!skus?.length) return;
+
+    const values = [];
+    const placeholders = [];
+    let idx = 1;
+
+    skus.forEach((sku) => {
+      sku.weekly_sales.forEach((week) => {
+        placeholders.push(`(
+        $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++},
+        $${idx++}, $${idx++}, $${idx++}, $${idx++}, $${idx++},
+        $${idx++}, $${idx++}, $${idx++}, $${idx++},
+        $${idx++}, $${idx++}
+      )`);
+
+        values.push(
+          sku.class, // 1
+          sku.sku, // 2
+          sku.upc, // 3
+          sku.part_number, // 4
+          sku.part_description, // 5
+
+          normalizeNumeric(sku.store_count), // 6
+          sku.end_of_life, // 7
+          normalizeNumeric(sku.price), // 8
+          normalizeNumeric(sku.msrp), // 9
+          normalizeNumeric(sku.margin_pct), // 10
+
+          normalizeNumeric(sku.on_hand), // 11
+          normalizeNumeric(sku.on_order), // 12
+          normalizeNumeric(sku.wos), // 13
+          normalizeNumeric(sku.tw_vs_lw_pct), // 14
+
+          week.week_end, // 15
+          normalizeNumeric(week.units) // 16
+        );
+      });
+    });
+
+    const query = `
+    INSERT INTO bestbuy_powerbi_reports.ten_week_gross_sales (
+      class, sku, upc, part_number, part_description,
+      store_count, end_of_life, price, msrp, margin_pct,
+      on_hand, on_order, wos, tw_vs_lw_pct,
+      week_end, units
+    )
+    VALUES ${placeholders.join(",")}
+    ON CONFLICT (sku, week_end)
+    DO UPDATE SET
+      units = EXCLUDED.units,
+      on_hand = EXCLUDED.on_hand,
+      on_order = EXCLUDED.on_order,
+      wos = EXCLUDED.wos,
+      tw_vs_lw_pct = EXCLUDED.tw_vs_lw_pct,
+      price = EXCLUDED.price,
+      msrp = EXCLUDED.msrp,
+      margin_pct = EXCLUDED.margin_pct
+  `;
+
+    await commonDbUtils.query(query, values);
+  },
 };
 
 module.exports = {
