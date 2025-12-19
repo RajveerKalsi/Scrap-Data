@@ -141,7 +141,7 @@ const commonDbUtils = {
     const placeholders = [];
 
     for (let i = 0; i < itemCount; i++) {
-      const base = i * 37;
+      const base = i * 51;
 
       placeholders.push(`
 ($${base + 1},  $${base + 2},  $${base + 3},  $${base + 4},  $${base + 5},
@@ -151,7 +151,10 @@ const commonDbUtils = {
  $${base + 21}, $${base + 22}, $${base + 23}, $${base + 24}, $${base + 25},
  $${base + 26}, $${base + 27}, $${base + 28}, $${base + 29}, $${base + 30},
  $${base + 31}, $${base + 32}, $${base + 33}, $${base + 34}, $${base + 35},
- $${base + 36}, $${base + 37})
+ $${base + 36}, $${base + 37}, $${base + 38}, $${base + 39}, $${base + 40}, 
+ $${base + 41}, $${base + 42}, $${base + 43}, $${base + 44}, $${base + 45}, 
+ $${base + 46}, $${base + 47}, $${base + 48}, $${base + 49}, $${base + 50},
+ $${base + 51})
 `);
 
       values.push(
@@ -199,8 +202,54 @@ const commonDbUtils = {
         normalizeNumeric(r["Curr Str In Whse Qty"]?.[i]),
         normalizeNumeric(r["Curr Str On Order Qty"]?.[i]),
         normalizeNumeric(r["Curr Whse On Hand Qty"]?.[i]),
-        normalizeNumeric(r["Curr Whse SS Order Qty"]?.[i])
+        normalizeNumeric(r["Curr Whse SS Order Qty"]?.[i]),
+
+        // LY metrics
+        normalizeNumeric(r["Traited Store LY"]?.[i]),
+        normalizeNumeric(r["LY LW POS Qty"]?.[i]),
+        normalizeNumeric(r["LY LW POS Sales"]?.[i]),
+        normalizeNumeric(r["LY YTD POS Qty"]?.[i]),
+        normalizeNumeric(r["LY YTD POS Sales"]?.[i]),
+
+        // Change metrics
+        normalizeNumeric(r["LW Sales Qty Chng"]?.[i]),
+        normalizeNumeric(r["LW Sales Chng"]?.[i]),
+        normalizeNumeric(r["YTD Sales Qty Chng"]?.[i]),
+        normalizeNumeric(r["YTD Sales Chng"]?.[i]),
+
+        // Shipments
+        normalizeNumeric(r["LW Gross Ship Qty"]?.[i]),
+        normalizeNumeric(r["YTD Gross Ship Qty"]?.[i]),
+
+        // Returns (negative allowed)
+        normalizeNumeric(r["LW Total Customer Item Return"]?.[i]),
+        normalizeNumeric(r["LW Total Return Rate"]?.[i]),
+        normalizeNumeric(r["YTD Total Customer Item Return"]?.[i])
       );
+
+      console.log("🧪 Sales Summary NEW fields (normalized)", {
+        traited_store_ly: normalizeNumeric(r["Traited Store LY"]?.[i]),
+        ly_lw_pos_qty: normalizeNumeric(r["LY LW POS Qty"]?.[i]),
+        ly_lw_pos_sales: normalizeNumeric(r["LY LW POS Sales"]?.[i]),
+        ly_ytd_pos_qty: normalizeNumeric(r["LY YTD POS Qty"]?.[i]),
+        ly_ytd_pos_sales: normalizeNumeric(r["LY YTD POS Sales"]?.[i]),
+
+        lw_sales_qty_chng: normalizeNumeric(r["LW Sales Qty Chng"]?.[i]),
+        lw_sales_chng: normalizeNumeric(r["LW Sales Chng"]?.[i]),
+        ytd_sales_qty_chng: normalizeNumeric(r["YTD Sales Qty Chng"]?.[i]),
+        ytd_sales_chng: normalizeNumeric(r["YTD Sales Chng"]?.[i]),
+
+        lw_gross_ship_qty: normalizeNumeric(r["LW Gross Ship Qty"]?.[i]),
+        ytd_gross_ship_qty: normalizeNumeric(r["YTD Gross Ship Qty"]?.[i]),
+
+        lw_total_customer_item_return: normalizeNumeric(
+          r["LW Total Customer Item Return"]?.[i]
+        ),
+        lw_total_return_rate: normalizeNumeric(r["LW Total Return Rate"]?.[i]),
+        ytd_total_customer_item_return: normalizeNumeric(
+          r["YTD Total Customer Item Return"]?.[i]
+        ),
+      });
     }
 
     const query = `
@@ -219,7 +268,10 @@ const commonDbUtils = {
       fc_52_53_wk_units, frcst_wos,
 
       curr_str_on_hand_qty, curr_str_in_transit_qty, curr_str_in_whse_qty,
-      curr_str_on_order_qty, curr_whse_on_hand_qty, curr_whse_ss_order_qty
+      curr_str_on_order_qty, curr_whse_on_hand_qty, curr_whse_ss_order_qty, 
+      traited_store_ly, ly_lw_pos_qty, ly_lw_pos_sales, ly_ytd_pos_qty, ly_ytd_pos_sales, 
+      lw_sales_qty_chng,lw_sales_chng,ytd_sales_qty_chng, ytd_sales_chng, 
+      lw_gross_ship_qty, ytd_gross_ship_qty, lw_total_customer_item_return, lw_total_return_rate, ytd_total_customer_item_return
     )
     VALUES ${placeholders.join(",")}
     ON CONFLICT (report_week, report_year, prime_item_nbr)
@@ -230,6 +282,14 @@ const commonDbUtils = {
       wkly_sell_thru_pct = EXCLUDED.wkly_sell_thru_pct,
       frcst_wos = EXCLUDED.frcst_wos
   `;
+
+    const COLS_PER_ROW = 51;
+
+    if (values.length % COLS_PER_ROW !== 0) {
+      throw new Error(
+        `Sales Summary insert mismatch: ${values.length} values not divisible by ${COLS_PER_ROW}`
+      );
+    }
 
     await commonDbUtils.query(query, values);
   },

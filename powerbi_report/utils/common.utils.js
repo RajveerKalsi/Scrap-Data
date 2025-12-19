@@ -188,11 +188,14 @@ export const commonUtils = {
     const map = new Map();
 
     rows.forEach((row) => {
-      const { metric, period, ...values } = row;
-      const key = `${metric}__${period}`;
+      const { section, metric, period, ...values } = row;
+
+      // ✅ section included in key
+      const key = `${section}__${metric}__${period}`;
 
       if (!map.has(key)) {
         map.set(key, {
+          section,
           metric,
           period,
         });
