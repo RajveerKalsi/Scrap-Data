@@ -555,14 +555,20 @@ DO UPDATE SET
 
     rows.forEach((r) => {
       placeholders.push(`(
-      $${idx++}, $${idx++}, $${idx++}, $${idx++},
-      $${idx++}, $${idx++},
-      $${idx++}, $${idx++},
-      $${idx++}, $${idx++},
-      $${idx++},
-      $${idx++}, $${idx++},
-      $${idx++}, $${idx++}
-    )`);
+  $${idx++}, $${idx++}, $${idx++}, $${idx++},
+
+  $${idx++}, $${idx++},
+  $${idx++}, $${idx++},
+
+  $${idx++}, $${idx++},
+  $${idx++},
+
+  $${idx++}, $${idx++}, $${idx++},
+  $${idx++}, $${idx++}, $${idx++},
+
+  $${idx++}, $${idx++},
+  $${idx++}, $${idx++}
+)`);
 
       values.push(
         r.bby_sku,
@@ -583,48 +589,66 @@ DO UPDATE SET
 
         normalizeNumeric(r.pos_units_ty),
         normalizeNumeric(r.pos_units_ly),
+        normalizeNumeric(r.pos_units_change_pct),
 
         normalizeNumeric(r.pos_dollars_ty),
-        normalizeNumeric(r.pos_dollars_ly)
+        normalizeNumeric(r.pos_dollars_ly),
+        normalizeNumeric(r.pos_dollars_change_pct),
+
+        normalizeNumeric(r.avg_price_ty),
+        normalizeNumeric(r.avg_price_ly),
+        normalizeNumeric(r.upspw),
+        normalizeNumeric(r.dpspw)
       );
     });
 
     const query = `
     INSERT INTO bestbuy_powerbi_reports.sku_level (
-      bby_sku,
-      mfg_part_number, description, upc,
+  bby_sku,
+  mfg_part_number, description, upc,
 
-      ca_pct, ca_pct_ly,
-      demand_fill_pct, demand_fill_pct_ly,
+  ca_pct, ca_pct_ly,
+  demand_fill_pct, demand_fill_pct_ly,
 
-      on_hand, on_hand_ly,
-      store_count,
+  on_hand, on_hand_ly,
+  store_count,
 
-      pos_units_ty, pos_units_ly,
-      pos_dollars_ty, pos_dollars_ly
-    )
+  pos_units_ty, pos_units_ly, pos_units_change_pct,
+  pos_dollars_ty, pos_dollars_ly, pos_dollars_change_pct,
+
+  avg_price_ty, avg_price_ly,
+  upspw, dpspw
+)
     VALUES ${placeholders.join(",")}
     ON CONFLICT (bby_sku)
-    DO UPDATE SET
-      mfg_part_number = EXCLUDED.mfg_part_number,
-      description = EXCLUDED.description,
-      upc = EXCLUDED.upc,
+DO UPDATE SET
+  mfg_part_number = EXCLUDED.mfg_part_number,
+  description = EXCLUDED.description,
+  upc = EXCLUDED.upc,
 
-      ca_pct = EXCLUDED.ca_pct,
-      ca_pct_ly = EXCLUDED.ca_pct_ly,
-      demand_fill_pct = EXCLUDED.demand_fill_pct,
-      demand_fill_pct_ly = EXCLUDED.demand_fill_pct_ly,
+  ca_pct = EXCLUDED.ca_pct,
+  ca_pct_ly = EXCLUDED.ca_pct_ly,
+  demand_fill_pct = EXCLUDED.demand_fill_pct,
+  demand_fill_pct_ly = EXCLUDED.demand_fill_pct_ly,
 
-      on_hand = EXCLUDED.on_hand,
-      on_hand_ly = EXCLUDED.on_hand_ly,
-      store_count = EXCLUDED.store_count,
+  on_hand = EXCLUDED.on_hand,
+  on_hand_ly = EXCLUDED.on_hand_ly,
+  store_count = EXCLUDED.store_count,
 
-      pos_units_ty = EXCLUDED.pos_units_ty,
-      pos_units_ly = EXCLUDED.pos_units_ly,
-      pos_dollars_ty = EXCLUDED.pos_dollars_ty,
-      pos_dollars_ly = EXCLUDED.pos_dollars_ly,
+  pos_units_ty = EXCLUDED.pos_units_ty,
+  pos_units_ly = EXCLUDED.pos_units_ly,
+  pos_units_change_pct = EXCLUDED.pos_units_change_pct,
 
-      updated_at = NOW()
+  pos_dollars_ty = EXCLUDED.pos_dollars_ty,
+  pos_dollars_ly = EXCLUDED.pos_dollars_ly,
+  pos_dollars_change_pct = EXCLUDED.pos_dollars_change_pct,
+
+  avg_price_ty = EXCLUDED.avg_price_ty,
+  avg_price_ly = EXCLUDED.avg_price_ly,
+  upspw = EXCLUDED.upspw,
+  dpspw = EXCLUDED.dpspw,
+
+  updated_at = NOW();
   `;
 
     await commonDbUtils.query(query, values);

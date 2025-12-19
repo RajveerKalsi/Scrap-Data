@@ -86,28 +86,40 @@ const safeNumber = (cell) => {
   if (v && typeof v === "object" && v.error) return null;
   if (cell.text === "#ERROR!") return null;
 
-  // Formula with cached result
+  // ----------------------------
+  // 1️⃣ Formula cells
+  // ----------------------------
   if (v && typeof v === "object" && v.formula !== undefined) {
-    if (v.result !== null && v.result !== undefined) {
+    // If Excel cached a numeric result
+    if (typeof v.result === "number") {
       return Number.isFinite(v.result) ? v.result : null;
     }
 
-    const txt = cell.text?.replace(/[$,% ,]/g, "").trim();
+    // If result is "-" or missing → parse visible text
+    const txt = cell.text?.replace(/[$,%\s,]/g, "").trim();
+
+    if (!txt || txt === "-") return null;
+
     const n = Number(txt);
     return Number.isFinite(n) ? n : null;
   }
 
-  // String
-  if (typeof v === "string") {
-    if (v.includes("#ERROR")) return null;
-    const cleaned = v.replace(/[$,% ,]/g, "").trim();
-    const n = Number(cleaned);
-    return Number.isFinite(n) ? n : null;
-  }
-
-  // Number
+  // ----------------------------
+  // 2️⃣ Plain number
+  // ----------------------------
   if (typeof v === "number") {
     return Number.isFinite(v) ? v : null;
+  }
+
+  // ----------------------------
+  // 3️⃣ String (currency, percent, etc.)
+  // ----------------------------
+  if (typeof v === "string") {
+    if (v.trim() === "-" || v.trim() === "") return null;
+
+    const cleaned = v.replace(/[$,%\s,]/g, "");
+    const n = Number(cleaned);
+    return Number.isFinite(n) ? n : null;
   }
 
   return null;
@@ -1057,7 +1069,14 @@ export const bestBuyExtraction = {
         text.includes("model")
       ) {
         headerRowNum = i;
-        headers = row.values.slice(1).map((h) => h?.toString().trim());
+        headers = row.values
+          .slice(1)
+          .map((h) =>
+            typeof h === "string"
+              ? h.replace(/\s+/g, " ").replace(/\n/g, " ").trim().toLowerCase()
+              : ""
+          );
+
         break;
       }
     }
@@ -1068,7 +1087,12 @@ export const bestBuyExtraction = {
 
     console.log("🧾 Headers:", headers);
 
-    const col = (name) => headers.indexOf(name) + 1;
+    const col = (name) => {
+      const target = name.replace(/\s+/g, " ").trim().toLowerCase();
+
+      const idx = headers.findIndex((h) => h === target);
+      return idx === -1 ? -1 : idx + 1;
+    };
 
     // ----------------------------
     // DATA ROWS
@@ -1076,9 +1100,11 @@ export const bestBuyExtraction = {
     const results = [];
 
     const colNth = (name, nth = 1) => {
+      const target = name.replace(/\s+/g, " ").trim().toLowerCase();
+
       let count = 0;
       for (let i = 0; i < headers.length; i++) {
-        if (headers[i] === name) {
+        if (headers[i] === target) {
           count++;
           if (count === nth) return i + 1;
         }
@@ -1120,15 +1146,27 @@ export const bestBuyExtraction = {
         // ---- POS UNITS ----
         pos_units_ty: safeNumber(row.getCell(colNth("LW TY", 1))),
         pos_units_ly: safeNumber(row.getCell(colNth("LW LY", 1))),
+        pos_units_change_pct: safeNumber(row.getCell(colNth("% Chg", 1))),
 
         // ---- POS DOLLARS ----
         pos_dollars_ty: safeNumber(row.getCell(colNth("LW TY", 2))),
         pos_dollars_ly: safeNumber(row.getCell(colNth("LW LY", 2))),
+        pos_dollars_change_pct: safeNumber(row.getCell(colNth("% Chg", 2))),
+
+        // ---- AVERAGES ----
+        avg_price_ty: safeNumber(row.getCell(col("Avg Price TY"))),
+        avg_price_ly: safeNumber(row.getCell(col("Avg Price LY"))),
+        upspw: safeNumber(row.getCell(col("UPSPW"))),
+        dpspw: safeNumber(row.getCell(col("DPSPW"))),
       });
     }
 
     console.log(`\n🧪 Parsed ${results.length} SKU Level rows`);
     await commonDbUtils.insertBestBuySkuLevelRows(results);
+
+    // results.slice(0, 10).forEach((r, i) => {
+    //   console.log(`📦 Row ${i + 1}`, r);
+    // });
 
     console.log(
       `✅ Inserted ${results.length} rows into bestbuy_powerbi_reports.sku_level`
