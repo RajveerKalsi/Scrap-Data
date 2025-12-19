@@ -796,6 +796,47 @@ DO UPDATE SET
 
     console.log(`✅ Inserted ${values.length / 14} forecasting rows`);
   },
+
+  insertChartDataRows: async (rows) => {
+    if (!rows?.length) return;
+
+    const values = [];
+    const placeholders = [];
+    let i = 1;
+
+    rows.forEach((r) => {
+      placeholders.push(`(
+      $${i++}, $${i++}, $${i++}, $${i++},
+      $${i++}, $${i++}, $${i++}
+    )`);
+
+      values.push(
+        r.dept_code,
+        r.dept_name,
+        r.class_code,
+        r.class_name,
+        r.metric_name,
+        r.week_end,
+        r.metric_value
+      );
+    });
+
+    await commonDbUtils.query(
+      `
+    INSERT INTO bestbuy_powerbi_reports.chart_data (
+      dept_code, dept_name,
+      class_code, class_name,
+      metric_name, week_end, metric_value
+    )
+    VALUES ${placeholders.join(",")}
+    ON CONFLICT (dept_code, class_code, metric_name, week_end)
+    DO UPDATE SET
+      metric_value = EXCLUDED.metric_value,
+      updated_at = NOW()
+    `,
+      values
+    );
+  },
 };
 
 module.exports = {

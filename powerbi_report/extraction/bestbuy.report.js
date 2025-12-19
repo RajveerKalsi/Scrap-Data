@@ -1428,4 +1428,100 @@ export const bestBuyExtraction = {
     // });
     return results;
   },
+
+  exploreChartData: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Chart Data");
+
+    if (!sheet) throw new Error(`Sheet "Chart Data" not found`);
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+    console.log("🔍 Extracting: Chart Data");
+
+    // -----------------------------------
+    // FIND HEADER ROW (dates row)
+    // -----------------------------------
+    let headerRowNum = null;
+    let dateCols = [];
+
+    for (let r = 1; r <= sheet.rowCount; r++) {
+      const row = sheet.getRow(r);
+
+      const dates = [];
+      row.eachCell((cell, col) => {
+        if (cell.value instanceof Date) {
+          dates.push({ col, week_end: toISODate(cell.value) });
+        }
+      });
+
+      if (dates.length >= 6) {
+        headerRowNum = r;
+        dateCols = dates;
+        break;
+      }
+    }
+
+    if (!headerRowNum) {
+      throw new Error("❌ Date header row not found in Chart Data");
+    }
+
+    console.log(
+      "📅 Weeks:",
+      dateCols.map((d) => d.week_end)
+    );
+
+    // -----------------------------------
+    // DATA ROWS
+    // -----------------------------------
+    const results = [];
+
+    for (let r = headerRowNum + 1; r <= sheet.rowCount; r++) {
+      const row = sheet.getRow(r);
+      const label = row.getCell(1).text?.trim();
+
+      if (!label) continue;
+      if (!label.toLowerCase().includes("dept:")) continue;
+
+      // Example:
+      // Dept: 6-Computers  Class: 158-Input Devices
+      const match = label.match(
+        /Dept:\s*(\d+)-([^\s]+)\s+Class:\s*(\d+)-(.+)/i
+      );
+
+      if (!match) continue;
+
+      const [, deptCode, deptName, classCode, className] = match;
+
+      dateCols.forEach(({ col, week_end }) => {
+        const val = safeNumber(row.getCell(col));
+
+        if (val === null) return;
+
+        results.push({
+          dept_code: Number(deptCode),
+          dept_name: deptName.trim(),
+          class_code: Number(classCode),
+          class_name: className.trim(),
+
+          metric_name: "INSTOCK_PCT",
+          week_end,
+          metric_value: val,
+        });
+      });
+    }
+
+    console.log(`🧪 Parsed ${results.length} Chart Data rows`);
+
+    // await commonDbUtils.insertChartDataRows(results);
+
+    results.slice(0, 10).forEach((r, i) => {
+      console.log(`📦 Row ${i + 1}`, r);
+    });
+
+    console.log(
+      `✅ Inserted ${results.length} rows into bestbuy_powerbi_reports.chart_data`
+    );
+
+    return results;
+  },
 };
