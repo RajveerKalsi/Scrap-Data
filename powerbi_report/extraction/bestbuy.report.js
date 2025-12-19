@@ -1174,4 +1174,127 @@ export const bestBuyExtraction = {
 
     return results;
   },
+
+  exploreSkuDetail: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Sku Detail");
+
+    if (!sheet) throw new Error(`Sheet "Sku Detail" not found`);
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+
+    // ---------------- HEADER ROW ----------------
+    let headerRowNum = null;
+    let headers = [];
+
+    for (let i = 1; i <= sheet.rowCount; i++) {
+      const row = sheet.getRow(i);
+      const text = row.values
+        .slice(1)
+        .map((v) => (typeof v === "string" ? v.toLowerCase() : ""))
+        .join(" ");
+
+      if (
+        text.includes("sku") &&
+        text.includes("description") &&
+        text.includes("upc")
+      ) {
+        headerRowNum = i;
+        headers = row.values
+          .slice(1)
+          .map((h) =>
+            typeof h === "string"
+              ? h.replace(/\s+/g, " ").trim().toLowerCase()
+              : ""
+          );
+        break;
+      }
+    }
+
+    if (!headerRowNum) throw new Error("Sku Detail header row not found");
+
+    const col = (name) => {
+      const idx = headers.findIndex((h) => h === name.toLowerCase());
+      return idx === -1 ? -1 : idx + 1;
+    };
+
+    const colNth = (name, nth = 1) => {
+      const target = name.toLowerCase();
+      let count = 0;
+      for (let i = 0; i < headers.length; i++) {
+        if (headers[i] === target) {
+          count++;
+          if (count === nth) return i + 1;
+        }
+      }
+      return -1;
+    };
+
+    // ---- HARD VALIDATION ----
+    ["sku", "description", "upc code", "model"].forEach((h) => {
+      if (col(h) === -1) {
+        throw new Error(`❌ Missing required column: ${h}`);
+      }
+    });
+
+    const results = [];
+
+    const PERIODS = [
+      { period: "LATEST_WEEK", nth: 1 },
+      { period: "LAST_4_WEEKS", nth: 2 },
+      { period: "LAST_12_WEEKS", nth: 3 },
+      { period: "TOTAL", nth: 4 },
+    ];
+
+    // ---------------- DATA ROWS ----------------
+    for (let r = headerRowNum + 1; r <= sheet.rowCount; r++) {
+      const row = sheet.getRow(r);
+
+      const sku = safeNumber(row.getCell(col("sku")));
+      const desc = row.getCell(col("description")).text?.trim() ?? "";
+
+      // ❌ Skip class headers, junk rows, totals
+      if (!sku || sku < 100000) continue;
+      if (!desc) continue;
+
+      const base = {
+        bby_sku: sku,
+        description: desc,
+        upc: row.getCell(col("upc code")).text?.trim() ?? null,
+        mfg_part_number: row.getCell(col("model")).text?.trim() ?? null,
+      };
+
+      PERIODS.forEach(({ period, nth }) => {
+        // ❌ Ignore TOTAL period
+        if (period === "TOTAL") return;
+
+        const start = colNth("ty $", nth);
+        if (start === -1) return;
+
+        const record = {
+          ...base,
+          period,
+          ty_dollars: safeNumber(row.getCell(start)),
+          ly_dollars: safeNumber(row.getCell(start + 1)),
+          dollars_change_pct: safeNumber(row.getCell(start + 2)),
+          ty_units: safeNumber(row.getCell(start + 3)),
+          ly_units: safeNumber(row.getCell(start + 4)),
+          units_change_pct: safeNumber(row.getCell(start + 5)),
+        };
+
+        const hasData =
+          record.ty_dollars !== null ||
+          record.ly_dollars !== null ||
+          record.ty_units !== null ||
+          record.ly_units !== null;
+
+        if (hasData) results.push(record);
+      });
+    }
+
+    console.log(`🧪 Parsed ${results.length} SKU Detail rows`);
+    await commonDbUtils.insertBestBuySkuDetailRows(results);
+
+    return results;
+  },
 };

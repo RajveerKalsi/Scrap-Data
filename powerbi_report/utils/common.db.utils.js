@@ -655,6 +655,69 @@ DO UPDATE SET
 
     console.log(`✅ Inserted ${rows.length} SKU Level rows`);
   },
+
+  insertBestBuySkuDetailRows: async (rows) => {
+    if (!rows?.length) return;
+
+    const values = [];
+    const placeholders = [];
+    let idx = 1;
+
+    rows.forEach((r) => {
+      placeholders.push(`(
+      $${idx++}, $${idx++}, $${idx++}, $${idx++},
+      $${idx++},
+      $${idx++}, $${idx++}, $${idx++},
+      $${idx++}, $${idx++}, $${idx++}
+    )`);
+
+      values.push(
+        r.bby_sku,
+        r.mfg_part_number,
+        r.description,
+        r.upc,
+
+        r.period,
+
+        normalizeNumeric(r.ty_dollars),
+        normalizeNumeric(r.ly_dollars),
+        normalizeNumeric(r.dollars_change_pct), // NULL
+
+        normalizeNumeric(r.ty_units),
+        normalizeNumeric(r.ly_units),
+        normalizeNumeric(r.units_change_pct) // NULL
+      );
+    });
+
+    const query = `
+    INSERT INTO bestbuy_powerbi_reports.sku_detail (
+      bby_sku, mfg_part_number, description, upc,
+      period,
+      ty_dollars, ly_dollars, dollars_change_pct,
+      ty_units, ly_units, units_change_pct
+    )
+    VALUES ${placeholders.join(",")}
+    ON CONFLICT (bby_sku, period)
+    DO UPDATE SET
+      mfg_part_number = EXCLUDED.mfg_part_number,
+      description = EXCLUDED.description,
+      upc = EXCLUDED.upc,
+
+      ty_dollars = EXCLUDED.ty_dollars,
+      ly_dollars = EXCLUDED.ly_dollars,
+      dollars_change_pct = EXCLUDED.dollars_change_pct,
+
+      ty_units = EXCLUDED.ty_units,
+      ly_units = EXCLUDED.ly_units,
+      units_change_pct = EXCLUDED.units_change_pct,
+
+      updated_at = NOW();
+  `;
+
+    await commonDbUtils.query(query, values);
+
+    console.log(`✅ Inserted ${rows.length} SKU Detail rows`);
+  },
 };
 
 module.exports = {
