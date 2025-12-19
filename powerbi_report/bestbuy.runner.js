@@ -37,4 +37,4 @@ const filePath = path.join(
   "DAJ_BestBuyCompany_SellThroughReport_2025-12-06.xlsx"
 );
 
-await bestBuyExtraction.exploreChartData(filePath);
+await bestBuyExtraction.explorePointOfSales(filePath);

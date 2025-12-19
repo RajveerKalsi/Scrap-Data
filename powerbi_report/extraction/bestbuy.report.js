@@ -1524,4 +1524,186 @@ export const bestBuyExtraction = {
 
     return results;
   },
+
+  explorePointOfSales: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Point of Sales");
+
+    if (!sheet) throw new Error(`Sheet "Point of Sales" not found`);
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+    console.log("🔍 Extracting: Point of Sales (Item-level only)");
+
+    // ------------------------------------------------
+    // FIND HEADER ROW
+    // ------------------------------------------------
+    let headerRowNum = null;
+    let headers = [];
+
+    for (let r = 1; r <= sheet.rowCount; r++) {
+      const row = sheet.getRow(r);
+      const text = row.values
+        .slice(1)
+        .map((v) => (typeof v === "string" ? v.toLowerCase() : ""))
+        .join(" ");
+
+      if (
+        text.includes("item") &&
+        text.includes("upc code") &&
+        text.includes("style") &&
+        text.includes("description")
+      ) {
+        headerRowNum = r;
+        headers = row.values
+          .slice(1)
+          .map((h) =>
+            typeof h === "string" ? h.replace(/\s+/g, " ").trim() : ""
+          );
+        break;
+      }
+    }
+
+    if (!headerRowNum) {
+      throw new Error("❌ Item header row not found in Point of Sales");
+    }
+
+    console.log("🧾 Headers:", headers);
+
+    // ------------------------------------------------
+    // SAFE COLUMN LOOKUP
+    // ------------------------------------------------
+    const col = (name) => {
+      const idx = headers.findIndex(
+        (h) => typeof h === "string" && h.toLowerCase() === name.toLowerCase()
+      );
+      return idx === -1 ? -1 : idx + 1;
+    };
+
+    // ------------------------------------------------
+    // DYNAMIC COLUMN GROUPING
+    // ------------------------------------------------
+    const weeklyUnitCols = [];
+    const demandFillCols = [];
+    const posMetricCols = [];
+
+    headers.forEach((h, i) => {
+      if (!h) return;
+
+      // Weekly unit history (Nov 29, Oct 25...)
+      if (
+        /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d+$/i.test(h)
+      ) {
+        weeklyUnitCols.push({ col: i + 1, label: h });
+      }
+
+      // Demand Fill % Dec 6
+      const dfMatch = h.match(/^demand fill %\s+(.+)$/i);
+      if (dfMatch) {
+        demandFillCols.push({
+          col: i + 1,
+          week: dfMatch[1],
+        });
+      }
+
+      // POS metrics (Retail / Units / TWLY)
+      const posMatch = h.match(
+        /^(dec \d+|twly)\s+(retail|sales units)\/\s*(stores|\.com)$/i
+      );
+      if (posMatch) {
+        posMetricCols.push({
+          col: i + 1,
+          period: posMatch[1],
+          metric: posMatch[2].toLowerCase() === "retail" ? "retail" : "units",
+          channel: posMatch[3].toLowerCase() === "stores" ? "store" : "online",
+        });
+      }
+    });
+
+    // ------------------------------------------------
+    // DATA ROWS
+    // ------------------------------------------------
+    const results = [];
+    let currentDept = null;
+    let currentClass = null;
+
+    for (let r = headerRowNum + 1; r <= sheet.rowCount; r++) {
+      const row = sheet.getRow(r);
+      const firstCell = row.getCell(1).text?.trim();
+
+      // Dept row
+      if (firstCell && /^\d+$/.test(firstCell) && !row.getCell(2).value) {
+        currentDept = Number(firstCell);
+        continue;
+      }
+
+      // Class row
+      if (currentDept && firstCell && /^\d+$/.test(firstCell)) {
+        currentClass = Number(firstCell);
+        continue;
+      }
+
+      const sku = safeNumber(row.getCell(col("Item")));
+      if (!sku) continue;
+
+      const desc = row.getCell(col("Description")).text?.trim();
+      if (!desc || desc.toLowerCase().includes("total")) continue;
+
+      const record = {
+        dept: currentDept,
+        class: currentClass,
+
+        bby_sku: sku,
+        upc: row.getCell(col("UPC Code")).text?.trim() ?? null,
+        style: row.getCell(col("Style")).text?.trim() ?? null,
+        description: desc,
+
+        cost: safeNumber(row.getCell(col("Cost"))),
+        retail_price: safeNumber(row.getCell(col("Retail Price"))),
+        on_hand: safeNumber(row.getCell(col("On Hand"))),
+        on_order: safeNumber(row.getCell(col("On Order"))),
+        in_stock_pct: safeNumber(row.getCell(col("In Stk %"))),
+
+        weeks_supply: safeNumber(row.getCell(col("Weeks Supply"))),
+        upspw: safeNumber(row.getCell(col("UPSPW"))),
+        pspw: safeNumber(row.getCell(col("$PSPW"))),
+
+        store_count: safeNumber(row.getCell(col("Store Count"))),
+        avg_sell_price: safeNumber(row.getCell(col("Avg. Sell Price"))),
+
+        demand_fill_pct: {},
+        pos_metrics: {},
+        weekly_units: [],
+      };
+
+      // Demand fill %
+      demandFillCols.forEach(({ col, week }) => {
+        const val = safeNumber(row.getCell(col));
+        if (val !== null) record.demand_fill_pct[week] = val;
+      });
+
+      // POS metrics
+      posMetricCols.forEach(({ col, period, metric, channel }) => {
+        const val = safeNumber(row.getCell(col));
+        if (val === null) return;
+
+        record.pos_metrics[period] ??= {};
+        record.pos_metrics[period][`${metric}_${channel}`] = val;
+      });
+
+      // Weekly units
+      weeklyUnitCols.forEach(({ col, label }) => {
+        const units = safeNumber(row.getCell(col));
+        if (units !== null) {
+          record.weekly_units.push({ week: label, units });
+        }
+      });
+
+      results.push(record);
+    }
+
+    console.log(`🧪 Parsed ${results.length} Point of Sales item rows`);
+    await commonDbUtils.insertBestBuyPointOfSalesRows(results);
+
+    return results;
+  },
 };

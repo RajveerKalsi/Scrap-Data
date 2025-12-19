@@ -837,6 +837,164 @@ DO UPDATE SET
       values
     );
   },
+
+  insertBestBuyPointOfSalesRows: async (rows) => {
+    if (!rows?.length) return;
+
+    // -----------------------------
+    // 1️⃣ ITEMS TABLE
+    // -----------------------------
+    {
+      const values = [];
+      const placeholders = [];
+      let i = 1;
+
+      rows.forEach((r) => {
+        placeholders.push(`(
+        $${i++}, $${i++}, $${i++},
+        $${i++}, $${i++}, $${i++},
+        $${i++}, $${i++}, $${i++}, $${i++}, $${i++},
+        $${i++}, $${i++}, $${i++}, $${i++}, $${i++}
+      )`);
+
+        values.push(
+          r.bby_sku,
+          r.dept,
+          r.class,
+
+          r.upc,
+          r.style,
+          r.description,
+
+          normalizeNumeric(r.cost),
+          normalizeNumeric(r.retail_price),
+          normalizeNumeric(r.on_hand),
+          normalizeNumeric(r.on_order),
+          normalizeNumeric(r.in_stock_pct),
+
+          normalizeNumeric(r.weeks_supply),
+          normalizeNumeric(r.upspw),
+          normalizeNumeric(r.pspw),
+          normalizeNumeric(r.store_count),
+          normalizeNumeric(r.avg_sell_price)
+        );
+      });
+
+      await commonDbUtils.query(
+        `
+      INSERT INTO bestbuy_powerbi_reports.point_of_sales_items (
+        bby_sku, dept, class,
+        upc, style, description,
+        cost, retail_price, on_hand, on_order, in_stock_pct,
+        weeks_supply, upspw, pspw, store_count, avg_sell_price
+      )
+      VALUES ${placeholders.join(",")}
+      ON CONFLICT (bby_sku)
+      DO UPDATE SET
+        dept = EXCLUDED.dept,
+        class = EXCLUDED.class,
+        upc = EXCLUDED.upc,
+        style = EXCLUDED.style,
+        description = EXCLUDED.description,
+        cost = EXCLUDED.cost,
+        retail_price = EXCLUDED.retail_price,
+        on_hand = EXCLUDED.on_hand,
+        on_order = EXCLUDED.on_order,
+        in_stock_pct = EXCLUDED.in_stock_pct,
+        weeks_supply = EXCLUDED.weeks_supply,
+        upspw = EXCLUDED.upspw,
+        pspw = EXCLUDED.pspw,
+        store_count = EXCLUDED.store_count,
+        avg_sell_price = EXCLUDED.avg_sell_price,
+        updated_at = NOW()
+      `,
+        values
+      );
+    }
+
+    // -----------------------------
+    // 2️⃣ WEEKLY UNITS
+    // -----------------------------
+    {
+      const values = [];
+      const placeholders = [];
+      let i = 1;
+
+      rows.forEach((r) => {
+        r.weekly_units.forEach((w) => {
+          placeholders.push(`($${i++}, $${i++}, $${i++})`);
+          values.push(r.bby_sku, w.week, normalizeNumeric(w.units));
+        });
+      });
+
+      await commonDbUtils.query(
+        `
+      INSERT INTO bestbuy_powerbi_reports.point_of_sales_weekly_units (
+        bby_sku, week_label, units
+      )
+      VALUES ${placeholders.join(",")}
+      ON CONFLICT (bby_sku, week_label)
+      DO UPDATE SET units = EXCLUDED.units
+      `,
+        values
+      );
+    }
+
+    // -----------------------------
+    // 3️⃣ METRICS (Demand Fill / Retail / Units)
+    // -----------------------------
+    {
+      const values = [];
+      const placeholders = [];
+      let i = 1;
+
+      rows.forEach((r) => {
+        // Demand Fill %
+        Object.entries(r.demand_fill_pct).forEach(([period, value]) => {
+          placeholders.push(
+            `($${i++}, $${i++}, 'DEMAND_FILL', $${i++}, $${i++})`
+          );
+          values.push(
+            r.bby_sku,
+            period,
+            "ALL", // ✅ FIX: channel is required
+            normalizeNumeric(value)
+          );
+        });
+
+        // POS Metrics (Retail / Units)
+        Object.entries(r.pos_metrics).forEach(([period, metrics]) => {
+          Object.entries(metrics).forEach(([key, value]) => {
+            const [metric, channel] = key.split("_");
+
+            placeholders.push(`($${i++}, $${i++}, $${i++}, $${i++}, $${i++})`);
+
+            values.push(
+              r.bby_sku,
+              period,
+              metric.toUpperCase(), // RETAIL | UNITS
+              channel, // store | online
+              normalizeNumeric(value)
+            );
+          });
+        });
+      });
+
+      await commonDbUtils.query(
+        `
+    INSERT INTO bestbuy_powerbi_reports.point_of_sales_metrics (
+      bby_sku, period, metric_type, channel, value
+    )
+    VALUES ${placeholders.join(",")}
+    ON CONFLICT (bby_sku, period, metric_type, channel)
+    DO UPDATE SET value = EXCLUDED.value
+    `,
+        values
+      );
+    }
+
+    console.log(`✅ Inserted Point of Sales (${rows.length} SKUs)`);
+  },
 };
 
 module.exports = {
