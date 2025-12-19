@@ -1297,4 +1297,135 @@ export const bestBuyExtraction = {
 
     return results;
   },
+
+  exploreForecasting: async (filePath) => {
+    const workbook = await commonUtils.readWorkbook(filePath);
+    const sheet = commonUtils.getSheetByName(workbook, "Forecasting");
+
+    if (!sheet) throw new Error(`Sheet "Forecasting" not found`);
+
+    console.log(`\n📄 Processing sheet: ${sheet.name}`);
+
+    // ---------------- HEADER ROW ----------------
+    const headerRowNum = 2;
+    const headers = sheet
+      .getRow(headerRowNum)
+      .values.slice(1)
+      .map((h) =>
+        h instanceof Date
+          ? h
+          : typeof h === "string"
+          ? h.replace(/\s+/g, " ").trim()
+          : ""
+      );
+
+    // ---------------- DATE COLS ----------------
+    const dateCols = [];
+    let avgSalesCol = -1;
+
+    headers.forEach((h, i) => {
+      const col = i + 1;
+
+      if (h instanceof Date) {
+        dateCols.push({ col, date: toISODate(h) });
+        return;
+      }
+
+      if (typeof h === "string" && /^\d{1,2}\/\d{1,2}\/\d{4}$/.test(h)) {
+        dateCols.push({ col, date: toISODate(new Date(h)) });
+        return;
+      }
+
+      if (typeof h === "string" && h.toLowerCase() === "average sales") {
+        avgSalesCol = col;
+      }
+    });
+
+    if (avgSalesCol === -1) {
+      throw new Error("Average Sales column not found");
+    }
+
+    const salesCols = dateCols.filter((d) => d.col < avgSalesCol);
+    const receiptCols = dateCols.filter((d) => d.col > avgSalesCol);
+
+    // ---------------- WOS COLS (AUTO) ----------------
+    const wosCols = [];
+
+    headers.forEach((h, i) => {
+      if (!h || typeof h !== "string") return;
+
+      const match = h.match(/^(\d+)\s+weeks$/i);
+      if (!match) return;
+
+      const weeks = Number(match[1]);
+      const unitsCol = i + 1;
+
+      const wosCol =
+        headers.findIndex(
+          (x) =>
+            typeof x === "string" &&
+            x.toLowerCase() === `${weeks} weeks - weeks of supply`
+        ) + 1;
+
+      if (wosCol > 0) {
+        wosCols.push({ weeks, unitsCol, wosCol });
+      }
+    });
+
+    // ---------------- DATA ----------------
+    const results = [];
+
+    for (let r = headerRowNum + 1; r <= sheet.rowCount; r++) {
+      const row = sheet.getRow(r);
+      const sku = safeNumber(row.getCell(3));
+      if (!sku) continue;
+
+      const record = {
+        class: row.getCell(1).text?.trim(),
+        upc: row.getCell(2).text?.trim(),
+        bby_sku: sku,
+        item_description: row.getCell(4).text?.trim(),
+        mfg_part_number: row.getCell(5).text?.trim(),
+        perf: row.getCell(6).text?.trim(),
+
+        store_count: safeNumber(row.getCell(7)),
+        ca_pct: safeNumber(row.getCell(8)),
+        on_hand: safeNumber(row.getCell(9)),
+
+        sales: [],
+        receipt_forecast: [],
+        wos: [],
+      };
+
+      salesCols.forEach(({ col, date }) => {
+        const units = safeNumber(row.getCell(col));
+        if (units !== null) record.sales.push({ week_end: date, units });
+      });
+
+      receiptCols.forEach(({ col, date }) => {
+        const units = safeNumber(row.getCell(col));
+        if (units !== null)
+          record.receipt_forecast.push({ week_end: date, units });
+      });
+
+      wosCols.forEach(({ weeks, unitsCol, wosCol }) => {
+        const units = safeNumber(row.getCell(unitsCol));
+        const wos = safeNumber(row.getCell(wosCol));
+
+        if (units !== null || wos !== null) {
+          record.wos.push({ weeks, units, wos });
+        }
+      });
+
+      results.push(record);
+    }
+
+    console.log(`🧪 Parsed ${results.length} Forecasting rows`);
+    await commonDbUtils.insertBestBuyForecastingRows(results);
+
+    // results.slice(0, 10).forEach((r, i) => {
+    //   console.log(`📦 Row ${i + 1}`, r);
+    // });
+    return results;
+  },
 };

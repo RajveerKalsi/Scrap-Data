@@ -718,6 +718,84 @@ DO UPDATE SET
 
     console.log(`✅ Inserted ${rows.length} SKU Detail rows`);
   },
+
+  insertBestBuyForecastingRows: async (rows) => {
+    if (!rows?.length) return;
+
+    const values = [];
+    const placeholders = [];
+    let i = 1;
+
+    const pushRow = (
+      r,
+      week_end,
+      metric_type,
+      metric_window,
+      units,
+      weeks_of_supply
+    ) => {
+      placeholders.push(`(
+      $${i++}, $${i++}, $${i++}, $${i++},
+      $${i++}, $${i++},
+      $${i++}, $${i++}, $${i++},
+      $${i++}, $${i++}, $${i++},
+      $${i++}, $${i++}
+    )`);
+
+      values.push(
+        r.bby_sku,
+        r.mfg_part_number,
+        r.upc,
+        r.class,
+        r.item_description,
+        r.perf,
+        r.store_count,
+        r.ca_pct,
+        r.on_hand,
+        week_end,
+        metric_type,
+        metric_window,
+        units,
+        weeks_of_supply
+      );
+    };
+
+    rows.forEach((r) => {
+      r.sales.forEach((s) => {
+        pushRow(r, s.week_end, "SALES", 0, s.units, null);
+      });
+
+      r.receipt_forecast.forEach((rf) => {
+        pushRow(r, rf.week_end, "RECEIPT", 0, rf.units, null);
+      });
+
+      r.wos.forEach((w) => {
+        pushRow(r, null, "WOS", w.weeks, w.units, w.wos);
+      });
+    });
+
+    await commonDbUtils.query(
+      `
+    INSERT INTO bestbuy_powerbi_reports.forecasting
+    (
+      bby_sku, mfg_part_number, upc, class,
+      item_description, perf,
+      store_count, ca_pct, on_hand,
+      week_end, metric_type, metric_window,
+      units, weeks_of_supply
+    )
+    VALUES ${placeholders.join(",")}
+    ON CONFLICT (bby_sku, week_end, metric_type, metric_window)
+    DO UPDATE SET
+      units = EXCLUDED.units,
+      weeks_of_supply = EXCLUDED.weeks_of_supply,
+      updated_at = NOW()
+    `,
+      values
+    );
+
+    console.log(`✅ Inserted ${values.length / 14} forecasting rows`);
+  },
 };
 
 module.exports = {
